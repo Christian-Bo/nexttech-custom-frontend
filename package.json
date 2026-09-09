@@ -1,0 +1,26 @@
+{
+  "name": "nexttech-custom-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "preview": "nuxt preview",
+    "prepare": "nuxt prepare",
+    "lint": "eslint .",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "@mdi/font": "^7.0.0",
+    "nuxt": "^3.0.0",
+    "vue": "^3.0.0",
+    "vue-router": "^4.0.0",
+    "vuetify": "^3.0.0",
+    "vuetify-nuxt-module": "^0.18.0"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^1.0.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.0.0"
+  }
+}
