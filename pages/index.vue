@@ -1,140 +1,360 @@
-<!--
-  Página TEMPORAL: solo verifica que el theme NextTech carga bien.
-  La reemplaza Integrante 4 con el home/catálogo real.
--->
 <script setup lang="ts">
-import { ref } from 'vue'
-import { ORDER_STATUS } from '~/types/domain'
+useHead({ title: 'NextTech Custom | Productos personalizados en el campus' })
 
-const snackbar = useSnackbar()
-const { confirm } = useConfirm()
-const statuses = Object.values(ORDER_STATUS)
-const confirmResult = ref<string>('')
+/** Lado del producto que se muestra en la portada. */
+const side = ref<'A' | 'B'>('A')
 
-async function probarConfirm() {
-  const ok = await confirm({
-    title: '¿Eliminar este diseño?',
-    message: 'Esta acción no se puede deshacer.',
-    confirmText: 'Eliminar',
-    danger: true
-  })
-  confirmResult.value = ok ? 'Confirmado' : 'Cancelado'
-  if (ok) snackbar.success('Diseño eliminado')
-}
+/** Secuencia real del flujo, por eso va numerada. */
+const steps = [
+  {
+    title: 'Crea tu cuenta',
+    text: 'Tómate una foto, ponle filtros y recibe tu credencial con código QR.'
+  },
+  {
+    title: 'Personaliza los dos lados',
+    text: 'Pon una foto en el Lado A y un mensaje en el Lado B. Ves el resultado antes de pagar.'
+  },
+  {
+    title: 'Recíbelo en el campus',
+    text: 'Sigue tu pedido en tiempo real y recógelo en el punto de entrega que elijas.'
+  }
+]
 
-const palette = [
-  { name: 'Fondo', token: '--nt-bg', hex: '#0F172A' },
-  { name: 'Superficie', token: '--nt-surface', hex: '#1E293B' },
-  { name: 'Elevado', token: '--nt-surface-elevated', hex: '#334155' },
-  { name: 'Principal', token: '--nt-primary', hex: '#2563EB' },
-  { name: 'Acento', token: '--nt-accent', hex: '#06B6D4' },
-  { name: 'Éxito', token: '--nt-success', hex: '#22C55E' },
-  { name: 'Advertencia', token: '--nt-warning', hex: '#F59E0B' },
-  { name: 'Error', token: '--nt-error', hex: '#EF4444' }
+/** Catálogo del MVP definido en la propuesta del equipo. */
+const products = [
+  {
+    name: 'Llavero acrílico',
+    text: 'Rectangular, con foto, texto o stickers en cada lado.',
+    icon: 'mdi-key-chain-variant'
+  },
+  {
+    name: 'Photocard',
+    text: 'Tarjeta con diseño al frente y mensaje al reverso.',
+    icon: 'mdi-card-account-details-star-outline'
+  },
+  {
+    name: 'Imán fotográfico',
+    text: 'Tu imagen con texto y marco decorativo.',
+    icon: 'mdi-magnet'
+  }
 ]
 </script>
 
 <template>
-  <v-container class="py-10">
-    <h1 class="text-h4 font-weight-bold mb-2">
-      NextTech Custom
-    </h1>
-    <p class="text-medium-emphasis mb-8">
-      Tema base cargado. Esta página es temporal.
-    </p>
+  <div>
+    <!-- Portada -->
+    <section class="hero">
+      <v-container class="hero__grid">
+        <div>
+          <h1 class="hero__title">
+            Diseña tu llavero por los dos lados.
+          </h1>
+          <p class="hero__lead">
+            Llaveros, photocards e imanes con tu foto y tu mensaje.
+            Paga con tarjeta o en efectivo y recíbelo dentro del campus.
+          </p>
 
-    <v-row>
-      <v-col
-        v-for="c in palette"
-        :key="c.token"
-        cols="6"
-        sm="4"
-        md="3"
-      >
-        <v-card
-          variant="flat"
-          border
-        >
+          <div class="d-flex flex-wrap ga-3 mt-8">
+            <v-btn
+              color="primary"
+              size="x-large"
+              variant="flat"
+              class="text-none"
+              to="/registro"
+            >
+              Crear mi cuenta
+            </v-btn>
+            <v-btn
+              size="x-large"
+              variant="outlined"
+              class="text-none"
+              to="/login"
+            >
+              Ya tengo cuenta
+            </v-btn>
+          </div>
+        </div>
+
+        <!-- Producto de ejemplo: gira entre Lado A y Lado B -->
+        <div class="hero__product">
           <div
-            class="swatch"
-            :style="{ background: `var(${c.token})` }"
-          />
-          <v-card-text>
-            <div class="font-weight-medium">
-              {{ c.name }}
+            class="keychain"
+            :class="{ 'keychain--flipped': side === 'B' }"
+          >
+            <div
+              class="keychain__face keychain__face--a"
+              :aria-hidden="side !== 'A'"
+            >
+              <span class="keychain__hole" />
+              <v-icon
+                icon="mdi-account-circle"
+                size="104"
+              />
+              <span class="keychain__caption">Tu foto con filtros</span>
             </div>
-            <code class="text-caption text-medium-emphasis">{{ c.hex }}</code>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
 
-    <div class="d-flex flex-wrap ga-3 mt-8">
-      <v-btn color="primary">
-        Principal
-      </v-btn>
-      <v-btn
-        color="accent"
-        variant="tonal"
-      >
-        Acento
-      </v-btn>
-      <v-btn variant="outlined">
-        Secundario
-      </v-btn>
-      <v-chip color="success">
-        Entregado
-      </v-chip>
-      <v-chip color="warning">
-        En elaboración
-      </v-chip>
-      <v-chip color="error">
-        Comprador no encontrado
-      </v-chip>
-    </div>
+            <div
+              class="keychain__face keychain__face--b"
+              :aria-hidden="side !== 'B'"
+            >
+              <span class="keychain__hole" />
+              <span class="keychain__message">Promo 2027</span>
+              <span class="keychain__caption">Tu mensaje</span>
+            </div>
+          </div>
 
-    <h2 class="text-h6 font-weight-bold mt-12 mb-4">
-      Componentes UI (demo temporal)
-    </h2>
+          <v-btn-toggle
+            v-model="side"
+            mandatory
+            variant="outlined"
+            color="accent"
+            density="comfortable"
+            rounded="lg"
+            class="mt-6"
+            aria-label="Elegir qué lado del producto ver"
+          >
+            <v-btn
+              value="A"
+              class="text-none"
+            >
+              Lado A
+            </v-btn>
+            <v-btn
+              value="B"
+              class="text-none"
+            >
+              Lado B
+            </v-btn>
+          </v-btn-toggle>
+        </div>
+      </v-container>
+    </section>
 
-    <div class="d-flex flex-wrap ga-2 mb-6">
-      <v-btn variant="tonal" color="success" @click="snackbar.success('Guardado correctamente')">Aviso éxito</v-btn>
-      <v-btn variant="tonal" color="error" @click="snackbar.error('No se pudo guardar')">Aviso error</v-btn>
-      <v-btn variant="tonal" color="warning" @click="snackbar.warning('Revisa la imagen')">Aviso advertencia</v-btn>
-      <v-btn variant="tonal" color="info" @click="snackbar.info('Tienes cambios sin guardar')">Aviso info</v-btn>
-      <v-btn variant="outlined" @click="probarConfirm">Confirmación</v-btn>
-      <span v-if="confirmResult" class="align-self-center text-medium-emphasis">→ {{ confirmResult }}</span>
-    </div>
+    <!-- Cómo funciona -->
+    <section class="section">
+      <v-container class="section__container">
+        <h2 class="section__title">
+          Así funciona
+        </h2>
 
-    <div class="d-flex flex-wrap ga-2 mb-6">
-      <StatusChip v-for="s in statuses" :key="s" :status="s" />
-    </div>
+        <ol class="steps">
+          <li
+            v-for="(step, i) in steps"
+            :key="step.title"
+          >
+            <span
+              class="steps__number"
+              aria-hidden="true"
+            >{{ i + 1 }}</span>
+            <h3 class="steps__title">
+              {{ step.title }}
+            </h3>
+            <p class="steps__text">
+              {{ step.text }}
+            </p>
+          </li>
+        </ol>
+      </v-container>
+    </section>
 
-    <v-row>
-      <v-col cols="12" md="6">
-        <v-card border variant="flat">
-          <StateEmpty title="Aún no tienes pedidos" description="Cuando compres algo, aparecerá aquí.">
-            <template #actions>
-              <v-btn color="primary">Ver catálogo</v-btn>
-            </template>
-          </StateEmpty>
-        </v-card>
-      </v-col>
-      <v-col cols="12" md="6">
-        <v-card border variant="flat">
-          <StateError
-            :error="{ status: 503, code: 'SERVICE_UNAVAILABLE', message: 'El servicio no está disponible en este momento.' }"
-            @retry="snackbar.info('Reintentando…')"
-          />
-        </v-card>
-      </v-col>
-    </v-row>
-  </v-container>
+    <!-- Productos -->
+    <section class="section section--last">
+      <v-container class="section__container">
+        <h2 class="section__title">
+          Qué puedes personalizar
+        </h2>
+
+        <v-row>
+          <v-col
+            v-for="product in products"
+            :key="product.name"
+            cols="12"
+            md="4"
+          >
+            <v-card
+              class="pa-6 h-100"
+              variant="flat"
+              border
+              rounded="lg"
+            >
+              <v-icon
+                :icon="product.icon"
+                size="36"
+                class="product__icon"
+              />
+              <h3 class="text-h6 font-weight-semibold mt-4">
+                {{ product.name }}
+              </h3>
+              <p class="text-body-2 text-medium-emphasis mt-2">
+                {{ product.text }}
+              </p>
+            </v-card>
+          </v-col>
+        </v-row>
+      </v-container>
+    </section>
+  </div>
 </template>
 
 <style scoped>
-.swatch {
-  height: 72px;
+/* ---------- Portada ---------- */
+.hero {
   border-bottom: 1px solid var(--nt-border);
+}
+
+.hero__grid {
+  display: grid;
+  gap: 3rem;
+  align-items: center;
+  max-width: 1200px;
+  padding-block: 3.5rem 4rem;
+}
+
+.hero__title {
+  max-width: 12ch;
+  font-size: clamp(2.5rem, 6.5vw, 4.5rem);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.hero__lead {
+  max-width: 46ch;
+  margin-top: 1.25rem;
+  font-size: 1.125rem;
+  line-height: 1.6;
+  color: var(--nt-text-secondary);
+}
+
+.hero__product {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ---------- Producto que gira ---------- */
+.keychain {
+  position: relative;
+  width: min(250px, 68vw);
+  aspect-ratio: 3 / 4;
+  transform-style: preserve-3d;
+  transition: transform var(--nt-transition-base);
+  transition-duration: 700ms;
+}
+
+.keychain--flipped {
+  transform: rotateY(180deg);
+}
+
+.keychain__face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.875rem;
+  border-radius: 24px 24px 32px 32px;
+  backface-visibility: hidden;
+  box-shadow: 0 28px 56px -28px rgb(0 0 0 / 80%);
+}
+
+.keychain__face--a {
+  background-color: var(--nt-primary);
+  color: var(--nt-text);
+}
+
+.keychain__face--b {
+  background-color: var(--nt-surface-elevated);
+  border: 1px solid var(--nt-border);
+  transform: rotateY(180deg);
+}
+
+.keychain__hole {
+  position: absolute;
+  top: 1rem;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: var(--nt-bg);
+}
+
+.keychain__message {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.keychain__caption {
+  font-size: 0.9rem;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+/* ---------- Secciones ---------- */
+.section {
+  padding-block: 4rem;
+}
+
+.section--last {
+  padding-top: 0;
+}
+
+.section__container {
+  max-width: 1200px;
+}
+
+.section__title {
+  margin-bottom: 2rem;
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+/* ---------- Pasos ---------- */
+.steps {
+  display: grid;
+  gap: 2rem;
+  padding: 0;
+  list-style: none;
+}
+
+.steps__number {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 2px solid var(--nt-primary);
+  border-radius: 50%;
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+.steps__title {
+  margin-top: 1rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.steps__text {
+  max-width: 34ch;
+  margin-top: 0.5rem;
+  line-height: 1.6;
+  color: var(--nt-text-secondary);
+}
+
+.product__icon {
+  color: var(--nt-text-muted);
+}
+
+@media (min-width: 960px) {
+  .hero__grid {
+    grid-template-columns: 7fr 5fr;
+    padding-block: 5.5rem 6rem;
+  }
+
+  .steps {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 </style>
