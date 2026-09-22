@@ -22,6 +22,24 @@ async function probarConfirm() {
   if (ok) snackbar.success('Diseño eliminado')
 }
 
+const cameraOpen = ref(false)
+const photoUrl = ref<string | null>(null)
+
+function onPhoto(blob: Blob) {
+  if (photoUrl.value) URL.revokeObjectURL(photoUrl.value)
+  photoUrl.value = URL.createObjectURL(blob)
+  cameraOpen.value = false
+  snackbar.success('Foto capturada')
+}
+
+// Validación MOCK: en producción la hace el backend.
+async function validarQr(code: string) {
+  await new Promise(r => setTimeout(r, 500))
+  return code.startsWith('NT-')
+    ? { ok: true, message: `Código válido: ${code}` }
+    : { ok: false, message: 'Código no reconocido (prueba con uno que empiece con NT-)' }
+}
+
 const palette = [
   { name: 'Fondo', token: '--nt-bg', hex: '#0F172A' },
   { name: 'Superficie', token: '--nt-surface', hex: '#1E293B' },
@@ -126,6 +144,34 @@ const palette = [
             :error="{ status: 503, code: 'SERVICE_UNAVAILABLE', message: 'El servicio no está disponible en este momento.' }"
             @retry="snackbar.info('Reintentando…')"
           />
+        </v-card>
+      </v-col>
+    </v-row>
+
+    <h2 class="text-h6 font-weight-bold mt-12 mb-4">
+      Operación (demo temporal)
+    </h2>
+    <div class="d-flex flex-wrap ga-2 mb-6">
+      <v-btn color="primary" prepend-icon="mdi-palette" to="/personalizar">Abrir editor</v-btn>
+    </div>
+    <v-row>
+      <v-col cols="12" md="6">
+        <v-card border variant="flat" class="pa-4">
+          <h3 class="text-subtitle-1 font-weight-semibold mb-3">Cámara</h3>
+          <ClientOnly>
+            <CameraCapture v-if="cameraOpen" @capture="onPhoto" @cancel="cameraOpen = false" />
+            <div v-else class="d-flex flex-column align-center ga-3">
+              <img v-if="photoUrl" :src="photoUrl" alt="Foto capturada" style="max-width: 100%; border-radius: 10px">
+              <v-btn prepend-icon="mdi-camera" @click="cameraOpen = true">Probar cámara</v-btn>
+            </div>
+          </ClientOnly>
+        </v-card>
+      </v-col>
+      <v-col cols="12" md="6">
+        <v-card border variant="flat" class="pa-4">
+          <ClientOnly>
+            <QrScanner :validate="validarQr" :auto-start="false" @valid="(c: string) => snackbar.success(`QR aceptado: ${c}`)" />
+          </ClientOnly>
         </v-card>
       </v-col>
     </v-row>
