@@ -11,8 +11,11 @@
     "typecheck": "nuxt typecheck"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.3.0",
     "@mdi/font": "^7.0.0",
+    "@pinia/nuxt": "^1.0.2",
     "nuxt": "^3.0.0",
+    "pinia": "^4.0.3",
     "vue": "^3.0.0",
     "vue-router": "^4.0.0",
     "vuetify": "^3.0.0",
