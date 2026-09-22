@@ -11,6 +11,12 @@ export default defineNuxtConfig({
     '@nuxt/eslint'
   ],
 
+  // Componentes por nombre de archivo, sin prefijo de carpeta:
+  // components/ui/AppSnackbar.vue -> <AppSnackbar>
+  components: [
+    { path: '~/components', pathPrefix: false }
+  ],
+
   css: [
     '@fontsource/inter/400.css',
     '@fontsource/inter/500.css',

@@ -20,6 +20,10 @@
     <v-main>
       <slot />
     </v-main>
+
+    <!-- UI global: una sola instancia para toda la app -->
+    <AppSnackbar />
+    <ConfirmDialog />
   </v-app>
 </template>
 
