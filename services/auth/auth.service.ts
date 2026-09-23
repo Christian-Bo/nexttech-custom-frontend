@@ -1,4 +1,4 @@
-import type { AccessTokenResultDto } from '~/types/auth'
+import type { AccessTokenResultDto, BuyerRegisterRequestDto, BuyerRegistrationResultDto } from '~/types/auth'
 import { useApi } from '~/services/api'
 
 /**
@@ -10,6 +10,22 @@ export function useAuthService() {
   const api = useApi()
 
   return {
+    /** Crea la cuenta del comprador. Devuelve el id, la credencial QR y el token. */
+    register(payload: BuyerRegisterRequestDto) {
+      return api<BuyerRegistrationResultDto>('/api/auth/register', {
+        method: 'POST',
+        body: {
+          email: payload.email,
+          phone: payload.phone,
+          nickname: payload.nickname,
+          password: payload.password,
+          birthDate: payload.birthDate ?? null,
+          notifyByEmail: payload.notifyByEmail,
+          notifyByWhatsApp: payload.notifyByWhatsApp
+        }
+      })
+    },
+
     /** identifier = correo o nickname. */
     login(identifier: string, password: string) {
       return api<AccessTokenResultDto>('/api/auth/login', {
