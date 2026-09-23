@@ -198,7 +198,6 @@ onBeforeUnmount(() => {
 .show {
   min-height: 100vh;
   padding: clamp(16px, 3vw, 40px);
-  background: var(--nt-bg, #0f172a);
   display: flex;
   flex-direction: column;
   gap: clamp(16px, 2vw, 28px);
