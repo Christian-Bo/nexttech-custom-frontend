@@ -1,5 +1,6 @@
 <template>
   <v-app>
+    <AppBackground />
     <v-app-bar
       color="surface"
       flat
@@ -17,7 +18,7 @@
       </v-app-bar-title>
     </v-app-bar>
 
-    <v-main>
+    <v-main class="nt-layer">
       <slot />
     </v-main>
 

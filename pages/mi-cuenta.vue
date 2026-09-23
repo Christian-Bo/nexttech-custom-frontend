@@ -48,6 +48,15 @@ async function cerrarSesion() {
       </dl>
 
       <v-btn
+        class="mt-6 mr-3 text-none"
+        color="primary"
+        to="/mi-foto"
+        prepend-icon="mdi-account-box-outline"
+      >
+        Mi foto y credencial
+      </v-btn>
+
+      <v-btn
         class="mt-6 text-none"
         color="primary"
         variant="outlined"
