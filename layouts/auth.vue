@@ -1,6 +1,7 @@
 <template>
   <v-app>
-    <v-main class="auth">
+    <AppBackground intensity="full" />
+    <v-main class="auth nt-layer">
       <!-- Panel de marca: en móvil queda arriba, en escritorio a la izquierda -->
       <aside class="auth__brand">
         <BrandLogo size="large" />

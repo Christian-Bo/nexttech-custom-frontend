@@ -1,6 +1,7 @@
 <template>
   <v-app>
-    <v-main>
+    <AppBackground intensity="full" />
+    <v-main class="nt-layer">
       <slot />
     </v-main>
     <AppSnackbar />
