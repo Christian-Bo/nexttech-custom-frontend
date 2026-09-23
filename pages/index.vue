@@ -68,9 +68,10 @@ const products = [
               size="x-large"
               variant="outlined"
               class="text-none"
-              to="/login"
+              to="/catalogo"
+              prepend-icon="mdi-storefront-outline"
             >
-              Ya tengo cuenta
+              Ver catálogo
             </v-btn>
           </div>
         </div>

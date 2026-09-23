@@ -16,6 +16,7 @@ const cameraOpen = ref(false)
 const photoUrl = ref<string | null>(null)
 
 const MODULES = [
+  { to: '/catalogo', icon: 'mdi-storefront-outline', title: 'Tienda del comprador', text: 'Catálogo, carrito, checkout con área de entrega y pago, y mis pedidos.' },
   { to: '/personalizar', icon: 'mdi-palette-outline', title: 'Editor de personalización', text: 'Llavero Lado A/B, texto, imágenes, stickers, filtros, deshacer y giro 3D.' },
   { to: '/repartidor', icon: 'mdi-truck-delivery-outline', title: 'App del repartidor', text: 'Pedidos, QR del comprador, cobro, foto de evidencia y no encontrado.' },
   { to: '/mi-foto?nuevo=1', icon: 'mdi-account-box-outline', title: 'Foto y credencial del registro', text: 'Recorte del rostro, filtros, stickers, original vs. modificada y credencial PDF.' },
