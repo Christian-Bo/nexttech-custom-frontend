@@ -104,6 +104,13 @@ onMounted(() => void load())
       <RealtimeIndicator />
       <v-spacer />
       <v-btn
+        to="/panel/presentacion"
+        variant="tonal"
+        prepend-icon="mdi-presentation"
+      >
+        Presentación
+      </v-btn>
+      <v-btn
         to="/panel/produccion"
         variant="tonal"
         prepend-icon="mdi-hammer-wrench"
