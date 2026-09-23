@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { DesignExport, ProductTemplate, SideKey } from '../types/editor'
+import { MAX_STICKERS_PER_SIDE } from '../types/editor'
 import { useProductEditor } from '../composables/useProductEditor'
 import { EDITOR_COLORS, STICKERS } from '../config/products'
 import EditorContextPanel from './EditorContextPanel.vue'
@@ -10,7 +11,13 @@ import { ImageValidationError } from '~/utils/image'
  * Editor de personalización (client-only: usar dentro de <ClientOnly>).
  * Emite `complete` con el JSON (ConfiguracionJson) y los PNG finales por zona.
  */
-const props = defineProps<{ template: ProductTemplate }>()
+const props = defineProps<{
+  template: ProductTemplate
+  /** El padre está guardando (deshabilita "Listo"). */
+  saving?: boolean
+  /** Texto del botón final. */
+  finishText?: string
+}>()
 const emit = defineEmits<{ complete: [result: DesignExport] }>()
 
 const editor = useProductEditor(props.template)
@@ -71,6 +78,10 @@ function onDrop(event: DragEvent): void {
 }
 
 // ---------- acciones ----------
+
+function addSticker(emoji: string): void {
+  if (!editor.addSticker(emoji)) snackbar.warning(`Máximo ${MAX_STICKERS_PER_SIDE} stickers por lado.`)
+}
 
 async function clearSide(): Promise<void> {
   const ok = await confirm({
@@ -246,10 +257,10 @@ onBeforeUnmount(() => {
         <v-btn
           color="primary"
           prepend-icon="mdi-check"
-          :loading="finishing"
+          :loading="finishing || saving"
           @click="finish"
         >
-          Listo
+          {{ finishText ?? 'Listo' }}
         </v-btn>
       </div>
     </header>
@@ -296,7 +307,7 @@ onBeforeUnmount(() => {
                 type="button"
                 class="sticker"
                 :aria-label="`Sticker ${s}`"
-                @click="editor.addSticker(s)"
+                @click="addSticker(s)"
               >
                 {{ s }}
               </button>

@@ -9,6 +9,7 @@ import type {
   SideKey,
   ZoneDesignJson
 } from '../types/editor'
+import { MAX_STICKERS_PER_SIDE } from '../types/editor'
 import { fileService } from '~/services/fileService'
 import { processImage } from '~/utils/image'
 
@@ -275,8 +276,11 @@ export function useProductEditor(template: ProductTemplate) {
     addToCanvas(obj)
   }
 
-  function addSticker(emoji: string): void {
-    if (!fabric) return
+  /** Devuelve false si el lado ya tiene el máximo de stickers permitido. */
+  function addSticker(emoji: string): boolean {
+    if (!fabric) return false
+    const count = current()?.canvas.getObjects().filter(o => (o as NtObject).ntKind === 'sticker').length ?? 0
+    if (count >= MAX_STICKERS_PER_SIDE) return false
     const obj = new fabric.FabricText(emoji, {
       fontSize: Math.round(template.width * 0.18),
       originX: 'center',
@@ -284,6 +288,7 @@ export function useProductEditor(template: ProductTemplate) {
     }) as NtObject
     obj.ntKind = 'sticker'
     addToCanvas(obj)
+    return true
   }
 
   /** Procesa (valida, orienta, comprime), sube vía fileService y agrega al lado activo. */

@@ -48,27 +48,36 @@ export interface DeliveryOrderDto {
 }
 
 export interface CompleteDeliveryRequest {
-  /** Solo si el pago es en efectivo. */
+  /** Solo si el pago es en efectivo (para calcular el vuelto; la API no lo guarda aún). */
   montoRecibido?: number
-  fotoFileId: string
+  /** Foto de evidencia ya optimizada (máx. 2 MB). */
+  foto: Blob
   observacion?: string
 }
 
 export interface FailedDeliveryRequest {
   resultado: Exclude<DeliveryResult, 'ENTREGADO'>
   observacion: string
-  fotoFileId?: string
+  foto?: Blob
 }
 
+export interface DeliveryCapabilities {
+  /** La API permite registrar "pago no realizado". */
+  paymentFailure: boolean
+}
+
+/** Todas las operaciones usan el CÓDIGO de orden (ORD-XXXXXXXX), igual que la API. */
 export interface DeliveryService {
+  capabilities: DeliveryCapabilities
+  /** Pedidos listos para tomar + los que este repartidor ya tomó. */
   listAssigned: () => Promise<DeliveryOrderDto[]>
-  getOrder: (idOrden: number) => Promise<DeliveryOrderDto>
-  /** LISTO_PARA_ENTREGA -> EN_ENTREGA (abre IntentoEntrega). */
-  startDelivery: (idOrden: number) => Promise<DeliveryOrderDto>
+  getOrder: (codigo: string) => Promise<DeliveryOrderDto>
+  /** LISTO_PARA_ENTREGA -> EN_ENTREGA (toma la orden y abre IntentoEntrega). */
+  startDelivery: (codigo: string) => Promise<DeliveryOrderDto>
   /** Valida el QR que muestra el comprador contra la orden. */
-  validateOrderQr: (idOrden: number, qr: string) => Promise<{ ok: boolean, message: string }>
-  /** Busca una orden asignada por QR escaneado o por código tecleado (enunciado 4.a). */
+  validateOrderQr: (codigo: string, qr: string) => Promise<{ ok: boolean, message: string }>
+  /** Busca una orden por QR escaneado o por código tecleado (enunciado 4.a). */
   findByQr: (qrOrCode: string) => Promise<DeliveryOrderDto | null>
-  complete: (idOrden: number, body: CompleteDeliveryRequest) => Promise<DeliveryOrderDto>
-  reportFailed: (idOrden: number, body: FailedDeliveryRequest) => Promise<DeliveryOrderDto>
+  complete: (codigo: string, body: CompleteDeliveryRequest) => Promise<DeliveryOrderDto>
+  reportFailed: (codigo: string, body: FailedDeliveryRequest) => Promise<DeliveryOrderDto>
 }

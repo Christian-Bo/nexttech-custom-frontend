@@ -2,11 +2,11 @@
 import { computed } from 'vue'
 
 /** Indicador de la conexión en vivo. Montar donde haya datos en tiempo real. */
-const { status, reconnect } = useRealtime()
+const { status, mode, reconnect } = useRealtime()
 
 const view = computed(() => {
   switch (status.value) {
-    case 'connected': return { text: 'En vivo', color: 'success', live: true }
+    case 'connected': return { text: mode === 'polling' ? 'Actualización automática' : 'En vivo', color: 'success', live: true }
     case 'connecting': return { text: 'Conectando…', color: 'info', live: false }
     case 'reconnecting': return { text: 'Reconectando…', color: 'warning', live: false }
     case 'disconnected': return { text: 'Sin conexión', color: 'error', live: false }

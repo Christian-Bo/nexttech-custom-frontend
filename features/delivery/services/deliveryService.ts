@@ -1,14 +1,14 @@
 import type { DeliveryService } from '../types/delivery'
 import { createMockDeliveryService } from './mockDeliveryService'
+import { createHttpDeliveryService } from './httpDeliveryService'
+import { useApi } from '~/services/api'
 
 /**
  * Punto único para obtener el servicio de entregas.
- * Hoy: MOCK. Cuando existan los endpoints (Integrante 3), crear
- * `createHttpDeliveryService(useApi())` con la misma interfaz y elegirlo aquí
- * según `runtimeConfig.public.useMocks`.
+ * MOCK o API real (Integrante 3) según `runtimeConfig.public.useMocks`.
  */
 export function useDeliveryService(): DeliveryService {
-  return createMockDeliveryService()
+  return useRuntimeConfig().public.useMocks ? createMockDeliveryService() : createHttpDeliveryService(useApi())
 }
 
 export function formatQ(amount: number): string {

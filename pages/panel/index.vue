@@ -10,19 +10,8 @@ import ProductBreakdown from '~/features/dashboard/components/ProductBreakdown.v
 import RecentOrdersTable from '~/features/dashboard/components/RecentOrdersTable.vue'
 import { isApiError } from '~/services/api'
 import { formatQ, formatQCompact, formatTime } from '~/utils/format'
-import { INTERNAL_ROLES } from '~/types/auth'
 
-// Solo ADMIN / SUPERVISOR (en modo simulado se permite para la demo).
-definePageMeta({
-  middleware: [
-    (to) => {
-      if (useRuntimeConfig().public.useMocks) return
-      const auth = useAuthStore()
-      if (!auth.isAuthenticated) return navigateTo({ path: '/login', query: { redirect: to.fullPath } })
-      if (!auth.hasRole(INTERNAL_ROLES.ADMIN, INTERNAL_ROLES.SUPERVISOR)) return navigateTo('/')
-    }
-  ]
-})
+definePageMeta({ middleware: 'staff' })
 useHead({ title: 'Dashboard · NextTech Custom' })
 
 const service = useDashboardService()
@@ -80,6 +69,8 @@ function scheduleRefresh(): void {
 }
 
 realtime.on('OrderStatusChanged', scheduleRefresh)
+// Sin hub de SignalR: refresco automático cada 10 s.
+realtime.every(10_000, () => load(true))
 realtime.on('OrderCreated', (e) => {
   newOrders.value = new Set([...newOrders.value, e.idOrden])
   setTimeout(() => {
@@ -112,6 +103,13 @@ onMounted(() => void load())
       </div>
       <RealtimeIndicator />
       <v-spacer />
+      <v-btn
+        to="/panel/produccion"
+        variant="tonal"
+        prepend-icon="mdi-hammer-wrench"
+      >
+        Producción
+      </v-btn>
       <v-btn-toggle
         v-model="range"
         mandatory
@@ -178,7 +176,7 @@ onMounted(() => void load())
           label="En producción"
           icon="mdi-hammer-wrench"
           :value="kpis.enProduccion.toLocaleString('es-GT')"
-          hint="ahora"
+          :hint="range === 'total' ? 'total' : 'en el período'"
           :flash="flashing.has('enProduccion')"
         />
         <KpiTile
@@ -198,6 +196,7 @@ onMounted(() => void load())
 
       <template v-else>
         <v-card
+          v-if="data.ventas.length > 0"
           border
           variant="flat"
           class="pa-5 mb-6"
@@ -235,6 +234,7 @@ onMounted(() => void load())
         </div>
 
         <v-card
+          v-if="data.ultimos.length > 0"
           border
           variant="flat"
           class="pa-5"

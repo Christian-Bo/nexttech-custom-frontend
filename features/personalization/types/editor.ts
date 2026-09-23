@@ -29,7 +29,14 @@ export interface ProductTemplate {
   zones: ZoneTemplate[]
   /** true = medidas aún no confirmadas en BD. */
   provisional?: boolean
+  /** Datos de la API (catálogo real). Ausentes en modo simulado. */
+  idVariante?: number
+  zoneIds?: Partial<Record<SideKey, number>>
+  price?: number
 }
+
+/** Límite de negocio del backend (PersonalizationJsonValidator). */
+export const MAX_STICKERS_PER_SIDE = 3
 
 export type EditorObjectKind = 'text' | 'image' | 'sticker' | 'shape'
 

@@ -5,8 +5,9 @@ import { useAuthStore } from '~/stores/auth'
 
 /**
  * Conexión de tiempo real ÚNICA para toda la app (client-only).
- * - Transporte real: SignalR con reconexión automática y JWT.
- * - Transporte mock: simulador local (runtimeConfig.public.useMocks).
+ * - 'signalr': hub real con reconexión automática y JWT.
+ * - 'polling': mientras el backend no tenga hub, las pantallas se refrescan con `every()`.
+ * - mock: simulador local (runtimeConfig.public.useMocks).
  * Cada `on()` se desuscribe solo al desmontar; la conexión se cierra
  * cuando ya nadie la usa (conteo de referencias) => sin duplicados ni fugas.
  */
@@ -52,6 +53,19 @@ function createMockTransport(setStatus: (s: RealtimeStatus) => void): Transport 
   }
 }
 
+/** Sin hub: la "conexión" es la consulta periódica que hace cada pantalla con `every()`. */
+function createPollingTransport(setStatus: (s: RealtimeStatus) => void): Transport {
+  return {
+    async start() {
+      setStatus(typeof navigator !== 'undefined' && !navigator.onLine ? 'disconnected' : 'connected')
+    },
+    async stop() {
+      setStatus('disconnected')
+    },
+    async invoke() {}
+  }
+}
+
 async function createSignalRTransport(url: string, getToken: () => string | null, setStatus: (s: RealtimeStatus) => void): Promise<Transport> {
   const signalR = await import('@microsoft/signalr')
   const connection = new signalR.HubConnectionBuilder()
@@ -90,15 +104,20 @@ export function useRealtime() {
   const config = useRuntimeConfig()
   const auth = useAuthStore()
   const setStatus = (s: RealtimeStatus) => (status.value = s)
+  const mode: 'mock' | 'signalr' | 'polling' = config.public.useMocks
+    ? 'mock'
+    : config.public.realtimeMode === 'signalr' ? 'signalr' : 'polling'
 
   async function connect(): Promise<void> {
     if (!import.meta.client) return
     if (transport && status.value !== 'disconnected') return
     if (starting) return starting
     starting = (async () => {
-      transport ??= config.public.useMocks
+      transport ??= mode === 'mock'
         ? createMockTransport(setStatus)
-        : await createSignalRTransport(`${config.public.apiBase}${config.public.realtimeHubPath}`, () => auth.accessToken, setStatus)
+        : mode === 'signalr'
+          ? await createSignalRTransport(`${config.public.apiBase}${config.public.realtimeHubPath}`, () => auth.accessToken, setStatus)
+          : createPollingTransport(setStatus)
       await transport.start()
     })().finally(() => (starting = null))
     return starting
@@ -131,6 +150,39 @@ export function useRealtime() {
     return off
   }
 
+  /**
+   * Refresco periódico: solo corre en modo 'polling' (en mock/SignalR llegan eventos).
+   * Se pausa con la pestaña oculta y se limpia solo al desmontar.
+   */
+  function every(ms: number, task: () => unknown): () => void {
+    if (!import.meta.client || mode !== 'polling') return () => {}
+    refCount++
+    void connect()
+    const tick = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) void task()
+    }
+    const timer = setInterval(tick, ms)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') tick()
+    }
+    const onNetwork = () => setStatus(navigator.onLine ? 'connected' : 'disconnected')
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('online', onNetwork)
+    window.addEventListener('offline', onNetwork)
+    let active = true
+    const stop = () => {
+      if (!active) return
+      active = false
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('online', onNetwork)
+      window.removeEventListener('offline', onNetwork)
+      void release()
+    }
+    if (getCurrentScope()) onScopeDispose(stop)
+    return stop
+  }
+
   /** Llama un método del hub (p. ej. unirse al grupo de una orden). */
   async function invoke(method: string, ...args: unknown[]): Promise<void> {
     await transport?.invoke(method, ...args)
@@ -142,5 +194,5 @@ export function useRealtime() {
     else await connect()
   }
 
-  return { status: readonly(status), on, invoke, reconnect }
+  return { status: readonly(status), mode, on, every, invoke, reconnect }
 }

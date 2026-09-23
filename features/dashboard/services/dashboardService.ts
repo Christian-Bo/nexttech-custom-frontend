@@ -2,6 +2,7 @@ import type { DashboardRange, DashboardService, DashboardSummaryDto, ProductSale
 import type { OrderStatus } from '~/types/domain'
 import { useMockOrders } from '~/services/mock/mockOrders'
 import { useApi } from '~/services/api'
+import { statusFromName } from '~/utils/orderStatus'
 
 const DAY = 86_400_000
 const STATUS_ORDER: OrderStatus[] = ['ORDEN_GENERADA', 'EN_ELABORACION', 'LISTO_PARA_ENTREGA', 'EN_ENTREGA', 'ENTREGADO', 'COMPRADOR_NO_ENCONTRADO']
@@ -80,11 +81,42 @@ function createMockDashboardService(): DashboardService {
   }
 }
 
-/** Real (provisional): GET /api/dashboard/summary?range= — confirmar con Integrante 3. */
+/** Respuesta real de GET /api/dashboard/sales?range=day|week|total (Integrante 3). */
+interface DashboardVentasApi {
+  rango: string
+  desde: string
+  hasta: string
+  totalOrdenes: number
+  totalVentas: number
+  porEstado: { nombre: string, cantidad: number, total: number }[]
+  porProducto: { nombre: string, cantidad: number, total: number }[]
+}
+
 function createHttpDashboardService(): DashboardService {
   const api = useApi()
   return {
-    getSummary: range => api<DashboardSummaryDto>('/api/dashboard/summary', { query: { range } })
+    async getSummary(range) {
+      const dto = await api<DashboardVentasApi>('/api/dashboard/sales', { query: { range } })
+      const countOf = (estado: OrderStatus) =>
+        dto.porEstado.filter(e => statusFromName(e.nombre) === estado).reduce((n, e) => n + e.cantidad, 0)
+      return {
+        kpis: {
+          ventas: dto.totalVentas,
+          pedidos: dto.totalOrdenes,
+          ticketPromedio: dto.totalOrdenes ? dto.totalVentas / dto.totalOrdenes : 0,
+          enProduccion: countOf('EN_ELABORACION'),
+          entregados: countOf('ENTREGADO'),
+          deltaVentasPct: null
+        },
+        // El endpoint aún no trae serie temporal ni últimos pedidos: esas tarjetas se ocultan.
+        ventas: [],
+        estados: STATUS_ORDER.map(estado => ({ estado, cantidad: countOf(estado) })),
+        productos: dto.porProducto
+          .map(p => ({ producto: p.nombre, unidades: p.cantidad, total: p.total }))
+          .sort((a, b) => b.total - a.total),
+        ultimos: []
+      }
+    }
   }
 }
 
