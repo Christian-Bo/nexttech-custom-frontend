@@ -2,9 +2,9 @@ name: Frontend CI
 
 on:
   pull_request:
-    branches: [develop, main]
+    branches: [Develop, develop, main]
   push:
-    branches: [develop, main]
+    branches: [Develop, develop, main]
 
 permissions:
   contents: read
@@ -35,6 +35,9 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Tests
+        run: npm test
 
       - name: Build
         run: npm run build
