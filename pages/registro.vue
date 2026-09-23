@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useAuthService } from '~/services/auth/auth.service'
+import { useAuthService } from '~/services/authService'
 import { isApiError } from '~/services/api'
 
 definePageMeta({ layout: 'auth' })
@@ -9,7 +9,7 @@ const auth = useAuthStore()
 const authService = useAuthService()
 const snackbar = useSnackbar()
 
-/** Credencial QR devuelta por el backend; la usa la pantalla de credencial. */
+/** Credencial QR devuelta por el backend al registrarse. */
 const credencial = useState<string | null>('nt-registro-credencial', () => null)
 
 const form = reactive({
@@ -104,7 +104,7 @@ async function crearCuenta() {
 
 <template>
   <div>
-    <!-- Avance del registro: los pasos 2 y 3 se construyen después -->
+    <!-- Avance del registro: los pasos 2 y 3 están en /mi-foto -->
     <ol class="pasos">
       <li class="pasos__item pasos__item--activo">
         <span class="pasos__num">1</span> Datos
