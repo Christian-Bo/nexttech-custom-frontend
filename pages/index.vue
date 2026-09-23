@@ -153,6 +153,8 @@ const palette = [
     </h2>
     <div class="d-flex flex-wrap ga-2 mb-6">
       <v-btn color="primary" prepend-icon="mdi-palette" to="/personalizar">Abrir editor</v-btn>
+      <v-btn variant="tonal" prepend-icon="mdi-truck-delivery-outline" to="/repartidor">App repartidor</v-btn>
+      <v-btn variant="tonal" prepend-icon="mdi-shield-account-outline" to="/demo/acceso">Acceso comprador</v-btn>
     </div>
     <v-row>
       <v-col cols="12" md="6">
