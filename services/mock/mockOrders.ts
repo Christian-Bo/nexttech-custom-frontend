@@ -178,6 +178,23 @@ export function useMockOrders() {
     emit('OrderCreated', { idOrden, codigoOrden: order.codigoOrden, nickname: order.nickname, producto, total: order.total, estado: order.estado, fechaCreacion })
   }
 
+  /** Orden creada desde el checkout de demostración. Devuelve el código. */
+  function createOrder(data: Pick<MockOrder, 'nickname' | 'producto' | 'cantidad' | 'total' | 'metodoPago' | 'areaEntrega' | 'referenciaEntrega'>): string {
+    const idOrden = Math.max(...orders.value.map(o => o.idOrden)) + 1
+    const fechaCreacion = new Date().toISOString()
+    const order: MockOrder = {
+      ...data,
+      idOrden,
+      codigoOrden: `NTC-${idOrden}`,
+      estado: 'ORDEN_GENERADA',
+      fechaCreacion,
+      historial: [{ estado: 'ORDEN_GENERADA', fechaHora: fechaCreacion }]
+    }
+    orders.value.push(order)
+    emit('OrderCreated', { idOrden, codigoOrden: order.codigoOrden, nickname: order.nickname, producto: order.producto, total: order.total, estado: order.estado, fechaCreacion })
+    return order.codigoOrden
+  }
+
   /** Un "latido" del simulador: crea o avanza órdenes al azar. */
   function tick(): void {
     if (Math.random() < 0.35) {
@@ -189,5 +206,5 @@ export function useMockOrders() {
     if (pick) advance(pick)
   }
 
-  return { orders, advanceByCode, tick }
+  return { orders, advanceByCode, createOrder, tick }
 }

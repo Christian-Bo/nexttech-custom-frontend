@@ -8,6 +8,8 @@ import { isApiError } from '~/services/api'
 import { useAuthStore } from '~/stores/auth'
 import type { ApiError } from '~/types/api'
 import { formatQ } from '~/utils/format'
+import { MOCK_PRODUCTS, findMockVariant } from '~/features/catalog/services/mockCatalog'
+import { saveDesignPreview } from '~/features/cart/services/designPreviews'
 
 // Fabric solo existe en el navegador: el editor se carga en cliente.
 const ProductCustomizer = defineAsyncComponent(
@@ -21,6 +23,7 @@ const route = useRoute()
 const router = useRouter()
 const snackbar = useSnackbar()
 const auth = useAuthStore()
+const cart = useCartStore()
 const useMocks = config.public.useMocks
 
 const templates = ref<ProductTemplate[]>(useMocks ? PRODUCT_TEMPLATES : [])
@@ -28,7 +31,6 @@ const loading = ref(!useMocks)
 const error = ref<ApiError | null>(null)
 const saving = ref(false)
 const saved = ref<{ name: string, price?: number } | null>(null)
-const mockResult = ref<{ json: string, sizes: string[] } | null>(null)
 
 const code = computed({
   get: () => {
@@ -59,11 +61,24 @@ async function loadCatalog(): Promise<void> {
 const personalizationService = useMocks ? null : usePersonalizationService()
 
 async function onComplete(output: DesignExport): Promise<void> {
-  // Modo simulado: mostrar lo que se enviaría.
-  if (!personalizationService || !template.value) {
-    const json = JSON.stringify(output.design)
-    mockResult.value = { json, sizes: Object.entries(output.images).map(([k, b]) => `Lado ${k}: ${(b.size / 1024).toFixed(0)} KB`) }
-    snackbar.success('Diseño listo (modo simulado)')
+  if (!template.value) return
+  // Modo demo: el diseño se agrega al carrito de demostración.
+  if (!personalizationService) {
+    const idVariante = MOCK_PRODUCTS.flatMap(p => p.variantes).find(v => v.codigoVariante === template.value!.code)?.idVariante
+    if (!idVariante) {
+      snackbar.warning('Este producto no está en el catálogo de demostración.')
+      return
+    }
+    saving.value = true
+    try {
+      const idPersonalizacion = Date.now()
+      await saveDesignPreview(idPersonalizacion, output.images.A)
+      await cart.add({ idVariante, cantidad: 1, idPersonalizacion })
+      saved.value = { name: template.value.name, price: template.value.price ?? findMockVariant(idVariante)?.variant.precioActual }
+    }
+    finally {
+      saving.value = false
+    }
     return
   }
   // Hay que ser comprador: el diseño queda autoguardado y se recupera al volver.
@@ -76,8 +91,9 @@ async function onComplete(output: DesignExport): Promise<void> {
   try {
     const id = await personalizationService.save(template.value, output)
     await personalizationService.addToCart(template.value.idVariante!, id)
+    await saveDesignPreview(id, output.images.A)
+    await cart.load()
     saved.value = { name: template.value.name, price: template.value.price }
-    snackbar.success('¡Agregado al carrito!')
   }
   catch (e) {
     snackbar.error(isApiError(e) ? e : 'No se pudo guardar tu diseño.')
@@ -87,7 +103,6 @@ async function onComplete(output: DesignExport): Promise<void> {
   }
 }
 
-const hasCartPage = computed(() => router.hasRoute('carrito'))
 
 onMounted(() => {
   if (!useMocks) void loadCatalog()
@@ -149,7 +164,7 @@ onMounted(() => {
         :key="template.code"
         :template="template"
         :saving="saving"
-        :finish-text="useMocks ? 'Listo' : 'Agregar al carrito'"
+        :finish-text="'Agregar al carrito'"
         @complete="onComplete"
       />
       <template #fallback>
@@ -160,7 +175,7 @@ onMounted(() => {
       </template>
     </ClientOnly>
 
-    <!-- Confirmación (API real) -->
+    <!-- Confirmación -->
     <v-dialog
       :model-value="!!saved"
       max-width="420"
@@ -184,8 +199,7 @@ onMounted(() => {
         </p>
         <div class="d-flex flex-column ga-2 mt-4">
           <v-btn
-            v-if="hasCartPage"
-            color="primary"
+                        color="primary"
             to="/carrito"
           >
             Ir al carrito
@@ -200,35 +214,5 @@ onMounted(() => {
       </v-card>
     </v-dialog>
 
-    <!-- Resultado (modo simulado) -->
-    <v-card
-      v-if="mockResult"
-      border
-      variant="flat"
-      class="mt-6"
-    >
-      <v-card-title class="text-subtitle-1">
-        Resultado (lo que se enviará al backend)
-      </v-card-title>
-      <v-card-text>
-        <p class="mb-2">
-          {{ mockResult.sizes.join(' · ') }} · JSON: {{ (mockResult.json.length / 1024).toFixed(1) }} KB
-        </p>
-        <pre class="json">{{ mockResult.json.slice(0, 1200) }}{{ mockResult.json.length > 1200 ? '…' : '' }}</pre>
-      </v-card-text>
-    </v-card>
   </v-container>
 </template>
-
-<style scoped>
-.json {
-  max-height: 260px;
-  overflow: auto;
-  padding: 12px;
-  font-size: 12px;
-  white-space: pre-wrap;
-  word-break: break-all;
-  background: var(--nt-bg);
-  border-radius: var(--nt-radius-sm);
-}
-</style>

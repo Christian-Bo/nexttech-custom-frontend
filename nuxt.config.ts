@@ -24,10 +24,12 @@ export default defineNuxtConfig({
     '@fontsource/inter/700.css',
     '@mdi/font/css/materialdesignicons.css',
     '~/assets/css/tokens.css',
-    '~/assets/css/base.css'
+    '~/assets/css/base.css',
+    '~/assets/css/effects.css'
   ],
 
   app: {
+    pageTransition: { name: 'page', mode: 'out-in' },
     head: {
       htmlAttrs: { lang: 'es' },
       title: 'NextTech Custom',
