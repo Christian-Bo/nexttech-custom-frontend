@@ -15,7 +15,7 @@ const notFound = ref(false)
 async function open(input: string): Promise<boolean> {
   const order = await service.findByQr(input)
   if (!order) return false
-  await navigateTo(`/repartidor/pedido/${order.idOrden}`)
+  await navigateTo(`/repartidor/pedido/${encodeURIComponent(order.codigoOrden)}`)
   return true
 }
 

@@ -42,6 +42,17 @@ async function load(): Promise<void> {
   }
 }
 
+// Nuevos pedidos listos para entrega aparecen solos (cada 15 s sin hub).
+const realtime = useRealtime()
+realtime.every(15_000, async () => {
+  try {
+    orders.value = await service.listAssigned()
+  }
+  catch {
+    // se reintenta en el siguiente ciclo
+  }
+})
+
 onMounted(load)
 </script>
 
@@ -118,7 +129,7 @@ onMounted(load)
     >
       <DeliveryOrderCard
         v-for="o in visible"
-        :key="o.idOrden"
+        :key="o.codigoOrden"
         :order="o"
       />
     </div>

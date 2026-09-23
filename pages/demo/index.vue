@@ -20,7 +20,9 @@ const MODULES = [
   { to: '/repartidor', icon: 'mdi-truck-delivery-outline', title: 'App del repartidor', text: 'Pedidos, QR del comprador, cobro, foto de evidencia y no encontrado.' },
   { to: '/demo/acceso', icon: 'mdi-shield-account-outline', title: 'Acceso con QR y rostro', text: 'Login por QR, login facial con prueba de vida y credencial PDF.' },
   { to: '/seguimiento/NTC-1045', icon: 'mdi-map-marker-path', title: 'Seguimiento en tiempo real', text: 'Línea de tiempo que cambia sola y QR de entrega para el comprador.' },
-  { to: '/panel', icon: 'mdi-view-dashboard-outline', title: 'Dashboard de operaciones', text: 'KPIs en vivo, ventas por día, pedidos por estado y últimos pedidos.' }
+  { to: '/panel', icon: 'mdi-view-dashboard-outline', title: 'Dashboard de operaciones', text: 'KPIs en vivo, ventas por día, pedidos por estado y últimos pedidos.' },
+  { to: '/panel/produccion', icon: 'mdi-hammer-wrench', title: 'Producción (supervisor)', text: 'Cola de elaboración con cronómetro de 60 s y "Marcar listo para entrega".' },
+  { to: '/interno', icon: 'mdi-badge-account-horizontal-outline', title: 'Acceso del personal', text: 'Login de repartidor, supervisor y admin, con cambio obligatorio de contraseña.' }
 ]
 
 async function probarConfirm() {

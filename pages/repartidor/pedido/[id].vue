@@ -3,13 +3,14 @@ import DeliveryOrderDetail from '~/features/delivery/components/DeliveryOrderDet
 
 definePageMeta({ layout: 'repartidor', middleware: 'repartidor' })
 
+// El parámetro es el CÓDIGO de la orden (p. ej. ORD-1A2B3C4D).
 const route = useRoute()
-const id = Number(route.params.id)
-useHead({ title: `Pedido ${id} · Repartidor` })
+const codigo = decodeURIComponent(String(route.params.id))
+useHead({ title: `Pedido ${codigo} · Repartidor` })
 </script>
 
 <template>
   <ClientOnly>
-    <DeliveryOrderDetail :id-orden="id" />
+    <DeliveryOrderDetail :codigo-orden="codigo" />
   </ClientOnly>
 </template>

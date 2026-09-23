@@ -7,7 +7,7 @@ defineProps<{ order: DeliveryOrderDto }>()
 
 <template>
   <v-card
-    :to="`/repartidor/pedido/${order.idOrden}`"
+    :to="`/repartidor/pedido/${encodeURIComponent(order.codigoOrden)}`"
     border
     variant="flat"
     class="order"

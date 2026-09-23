@@ -1,5 +1,6 @@
 import type { DeliveryOrderDto, DeliveryService } from '../types/delivery'
 import type { ApiError } from '~/types/api'
+import { fileService } from '~/services/fileService'
 
 /**
  * MOCK del servicio de entregas (mientras Integrante 3 publica los endpoints).
@@ -73,35 +74,37 @@ export function createMockDeliveryService(): DeliveryService {
   const state = useState<DeliveryOrderDto[]>('nt-mock-delivery', seed)
 
   const clone = <T>(v: T): T => structuredClone(toRaw(v))
-  const find = (id: number) => {
-    const o = state.value.find(x => x.idOrden === id)
+  const find = (codigo: string) => {
+    const o = state.value.find(x => x.codigoOrden.toUpperCase() === codigo.trim().toUpperCase())
     if (!o) throw apiError(404, 'La orden no existe o no está asignada a ti.')
     return o
   }
   const qrOf = (o: DeliveryOrderDto) => `NT-${o.codigoOrden}`
 
   return {
+    capabilities: { paymentFailure: true },
+
     async listAssigned() {
       await delay()
       return clone(state.value)
     },
 
-    async getOrder(id) {
+    async getOrder(codigo) {
       await delay(300)
-      return clone(find(id))
+      return clone(find(codigo))
     },
 
-    async startDelivery(id) {
+    async startDelivery(codigo) {
       await delay()
-      const o = find(id)
+      const o = find(codigo)
       if (o.estado !== 'LISTO_PARA_ENTREGA') throw apiError(409, 'Esta orden ya no está lista para entrega.')
       o.estado = 'EN_ENTREGA'
       return clone(o)
     },
 
-    async validateOrderQr(id, qr) {
+    async validateOrderQr(codigo, qr) {
       await delay(500)
-      const o = find(id)
+      const o = find(codigo)
       if (o.qrUtilizado) return { ok: false, message: 'Este QR ya fue utilizado.' }
       if (qr.trim() !== qrOf(o)) return { ok: false, message: 'El QR no corresponde a esta orden.' }
       o.qrUtilizado = true
@@ -119,9 +122,9 @@ export function createMockDeliveryService(): DeliveryService {
       return o ? clone(o) : null
     },
 
-    async complete(id, body) {
+    async complete(codigo, body) {
       await delay(700)
-      const o = find(id)
+      const o = find(codigo)
       if (o.estado !== 'EN_ENTREGA') throw apiError(409, 'Inicia la entrega antes de confirmarla.')
       if (!o.qrUtilizado) throw apiError(422, 'Verifica el QR del comprador antes de confirmar.')
       if (o.pago.metodo === 'EFECTIVO' && (body.montoRecibido ?? 0) < o.total) {
@@ -129,17 +132,19 @@ export function createMockDeliveryService(): DeliveryService {
       }
       o.estado = 'ENTREGADO'
       o.pago.estado = 'PAGADO'
-      o.ultimoIntento = { resultado: 'ENTREGADO', fechaHoraFin: new Date().toISOString(), observacion: body.observacion ?? null, fotoFileId: body.fotoFileId }
+      const { fileId } = await fileService.upload(body.foto)
+      o.ultimoIntento = { resultado: 'ENTREGADO', fechaHoraFin: new Date().toISOString(), observacion: body.observacion ?? null, fotoFileId: fileId }
       return clone(o)
     },
 
-    async reportFailed(id, body) {
+    async reportFailed(codigo, body) {
       await delay(700)
-      const o = find(id)
+      const o = find(codigo)
       if (o.estado !== 'EN_ENTREGA') throw apiError(409, 'Inicia la entrega antes de reportar un problema.')
       o.estado = body.resultado === 'COMPRADOR_NO_ENCONTRADO' ? 'COMPRADOR_NO_ENCONTRADO' : 'LISTO_PARA_ENTREGA'
       if (body.resultado === 'PAGO_NO_REALIZADO') o.pago.estado = 'RECHAZADO'
-      o.ultimoIntento = { resultado: body.resultado, fechaHoraFin: new Date().toISOString(), observacion: body.observacion, fotoFileId: body.fotoFileId ?? null }
+      const fotoFileId = body.foto ? (await fileService.upload(body.foto)).fileId : null
+      o.ultimoIntento = { resultado: body.resultado, fechaHoraFin: new Date().toISOString(), observacion: body.observacion, fotoFileId }
       return clone(o)
     }
   }

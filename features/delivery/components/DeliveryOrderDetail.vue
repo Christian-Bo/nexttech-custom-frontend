@@ -9,7 +9,7 @@ import { processImage } from '~/utils/image'
 import type { QrValidationResult } from '~/composables/useQrScanner'
 import { useDisplay } from 'vuetify'
 
-const props = defineProps<{ idOrden: number }>()
+const props = defineProps<{ codigoOrden: string }>()
 
 const service = useDeliveryService()
 const { xs } = useDisplay()
@@ -61,7 +61,7 @@ async function load(): Promise<void> {
   loading.value = true
   error.value = null
   try {
-    order.value = await service.getOrder(props.idOrden)
+    order.value = await service.getOrder(props.codigoOrden)
     await loadEvidence()
   }
   catch (e) {
@@ -88,7 +88,7 @@ async function startDelivery(): Promise<void> {
   if (!ok) return
   acting.value = true
   try {
-    order.value = await service.startDelivery(props.idOrden)
+    order.value = await service.startDelivery(props.codigoOrden)
     snackbar.info('Entrega iniciada. ¡Buen viaje!')
   }
   catch (e) {
@@ -100,9 +100,9 @@ async function startDelivery(): Promise<void> {
 }
 
 async function validateQr(code: string): Promise<QrValidationResult> {
-  const result = await service.validateOrderQr(props.idOrden, code)
+  const result = await service.validateOrderQr(props.codigoOrden, code)
   if (result.ok) {
-    order.value = await service.getOrder(props.idOrden)
+    order.value = await service.getOrder(props.codigoOrden)
     setTimeout(() => (qrDialog.value = false), 900)
   }
   return result
@@ -122,10 +122,10 @@ function onGalleryPhoto(event: Event): void {
   if (file) setPhoto(file)
 }
 
-async function uploadPhoto(): Promise<string | undefined> {
+/** Optimiza la foto (máx. 1280 px, <2 MB) antes de enviarla. */
+async function processedPhoto(): Promise<Blob | undefined> {
   if (!photo.value) return undefined
-  const processed = await processImage(photo.value, { maxSide: 1600, quality: 0.8 })
-  return (await fileService.upload(processed)).fileId
+  return processImage(photo.value, { maxSide: 1280, quality: 0.8 })
 }
 
 async function confirmDelivery(): Promise<void> {
@@ -140,9 +140,9 @@ async function confirmDelivery(): Promise<void> {
   if (!ok) return
   acting.value = true
   try {
-    const fotoFileId = await uploadPhoto()
-    order.value = await service.complete(props.idOrden, {
-      fotoFileId: fotoFileId!,
+    const foto = await processedPhoto()
+    order.value = await service.complete(props.codigoOrden, {
+      foto: foto!,
       montoRecibido: isCash.value ? cashReceived.value ?? undefined : undefined
     })
     await loadEvidence()
@@ -158,17 +158,12 @@ async function confirmDelivery(): Promise<void> {
 
 async function submitFailure(): Promise<void> {
   if (failNote.value.trim().length < 5) return
-  if (failReason.value === 'COMPRADOR_NO_ENCONTRADO' && !photo.value) {
-    snackbar.warning('Toma una foto del punto de entrega como evidencia.')
-    return
-  }
   acting.value = true
   try {
-    const fotoFileId = await uploadPhoto()
-    order.value = await service.reportFailed(props.idOrden, {
+    order.value = await service.reportFailed(props.codigoOrden, {
       resultado: failReason.value,
       observacion: failNote.value.trim(),
-      fotoFileId
+      foto: await processedPhoto()
     })
     failDialog.value = false
     await loadEvidence()
@@ -285,6 +280,7 @@ onBeforeUnmount(() => {
 
       <!-- Productos -->
       <v-card
+        v-if="order.items.length > 0"
         border
         variant="flat"
         class="pa-4"
@@ -340,6 +336,29 @@ onBeforeUnmount(() => {
           <v-spacer />
           <strong>{{ formatQ(order.total) }}</strong>
         </div>
+      </v-card>
+
+      <v-card
+        v-if="order.items.length === 0"
+        border
+        variant="flat"
+        class="pa-4 d-flex align-center"
+      >
+        <v-icon
+          :icon="order.pago.metodo === 'EFECTIVO' ? 'mdi-cash' : 'mdi-credit-card-outline'"
+          class="mr-2"
+        />
+        <span class="text-body-2">{{ order.pago.metodo === 'EFECTIVO' ? 'Efectivo' : 'Tarjeta' }}</span>
+        <v-chip
+          size="x-small"
+          class="ml-2"
+          variant="tonal"
+          :color="order.pago.estado === 'PAGADO' ? 'success' : 'warning'"
+        >
+          {{ order.pago.estado === 'PAGADO' ? 'Pagado' : 'Por cobrar' }}
+        </v-chip>
+        <v-spacer />
+        <strong>{{ formatQ(order.total) }}</strong>
       </v-card>
 
       <!-- Acción: iniciar -->
@@ -605,7 +624,7 @@ onBeforeUnmount(() => {
               label="El comprador no estaba en el punto de entrega"
             />
             <v-radio
-              v-if="order?.pago.metodo === 'EFECTIVO'"
+              v-if="order?.pago.metodo === 'EFECTIVO' && service.capabilities.paymentFailure"
               value="PAGO_NO_REALIZADO"
               label="El comprador no pudo pagar"
             />
@@ -628,7 +647,7 @@ onBeforeUnmount(() => {
               {{ photo ? 'Cambiar foto' : 'Tomar foto' }}
             </v-btn>
             <span class="text-caption text-medium-emphasis">
-              {{ failReason === 'COMPRADOR_NO_ENCONTRADO' ? 'Obligatoria' : 'Opcional' }}
+              Opcional
             </span>
             <v-spacer />
             <img
