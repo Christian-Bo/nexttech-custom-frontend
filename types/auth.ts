@@ -81,3 +81,78 @@ export interface AuthSession {
   actorType: ActorType
   mustChangePassword: boolean
 }
+
+// ---------------------------------------------------------------------------
+// Recuperación de contraseña
+// ---------------------------------------------------------------------------
+
+/** POST /api/auth/forgot-password */
+export interface ForgotPasswordRequestDto {
+  email: string
+}
+
+/** 200 de forgot-password. Mensaje siempre neutro (no revela si la cuenta existe). */
+export interface ForgotPasswordResultDto {
+  message: string
+  /** Solo en Development con SMTP deshabilitado. */
+  developmentToken: { token: string, expiresAt: string } | null
+}
+
+/** POST /api/auth/reset-password -> 204 */
+export interface ResetPasswordRequestDto {
+  token: string
+  newPassword: string
+}
+
+/** 200 de POST /api/auth/qr/rotate. El QR anterior queda inválido. */
+export interface QrRotateResultDto {
+  qrCredential: string
+}
+
+// ---------------------------------------------------------------------------
+// Biometría facial (Face API vía backend)
+// ---------------------------------------------------------------------------
+
+/** Reto de prueba de vida. Un reto nuevo por cada intento; expira (~60 s). */
+export interface FaceChallengeDto {
+  id: string
+  /** p. ej. 'TURN_IMAGE_LEFT' */
+  action: string
+  instruction: string
+  expiresAtUtc: string
+  expiresInSeconds: number
+}
+
+/** Fotos del intento: frontal + cumpliendo el reto. Máx. 5 MB c/u. */
+export interface FaceCaptureDto {
+  neutralImage: Blob
+  challengeImage: Blob
+}
+
+/** 200 de POST /api/face/enroll */
+export interface FaceEnrollResultDto {
+  enrolled: boolean
+  templateVersion: string
+  model: string
+  portraitWidth: number
+  portraitHeight: number
+  enrolledAtUtc: string
+  message: string
+}
+
+/**
+ * 200 de POST /api/face/verify.
+ * OJO: HTTP 200 NO significa aprobado; evaluar authenticationPassed + isLive + isMatch.
+ */
+export interface FaceVerifyResultDto {
+  authenticationPassed: boolean
+  decision: string
+  isLive: boolean | null
+  livenessDecision?: string
+  livenessReasonCode?: string
+  action?: string
+  isMatch: boolean | null
+  [key: string]: unknown
+}
+
+export const FACE_MAX_IMAGE_BYTES = 5 * 1024 * 1024
