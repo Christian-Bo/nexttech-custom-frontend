@@ -56,15 +56,30 @@ async function load(): Promise<void> {
   }
 }
 
-// Tiempo real: el estado cambia sin recargar la página.
-realtime.on('OrderStatusChanged', async (event) => {
-  if (!order.value || event.codigoOrden !== order.value.codigoOrden) return
-  order.value = await service.getByCode(props.codigoOrden)
+/** Recarga y, si el estado cambió, anima y avisa. */
+async function refresh(): Promise<void> {
+  if (!order.value) return
+  const before = order.value.estado
+  try {
+    order.value = await service.getByCode(props.codigoOrden)
+  }
+  catch {
+    return // sin red momentánea: se reintenta en el siguiente ciclo
+  }
+  const now = order.value.estado
+  if (now === before) return
   justChanged.value = true
   setTimeout(() => (justChanged.value = false), 1500)
-  const text = STATUS_TEXT[event.estado]
-  if (text) snackbar[event.estado === 'COMPRADOR_NO_ENCONTRADO' ? 'warning' : 'success'](text)
+  const text = STATUS_TEXT[now]
+  if (text) snackbar[now === 'COMPRADOR_NO_ENCONTRADO' ? 'warning' : 'success'](text)
+}
+
+// Tiempo real: el estado cambia sin recargar la página.
+// Con hub/simulador llegan eventos; sin hub, se consulta cada 5 s.
+realtime.on('OrderStatusChanged', (event) => {
+  if (order.value && event.codigoOrden === order.value.codigoOrden) void refresh()
 })
+realtime.every(5000, refresh)
 
 // Solo en modo simulado: para la demo.
 const mock = config.public.useMocks ? useMockOrders() : null

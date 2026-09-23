@@ -90,3 +90,9 @@ canvas {
     scroll-behavior: auto !important;
   }
 }
+
+/* Contenido por encima del fondo animado (<AppBackground>). */
+.nt-layer {
+  position: relative;
+  z-index: 1;
+}
