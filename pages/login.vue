@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useAuthService } from '~/services/auth/auth.service'
+import { useAuthService } from '~/services/authService'
 import { isApiError } from '~/services/api'
 
 definePageMeta({ layout: 'auth' })
@@ -35,7 +35,10 @@ async function iniciarSesion() {
 
   loading.value = true
   try {
-    const result = await authService.login(identifier.value.trim(), password.value)
+    const result = await authService.login({
+      identifier: identifier.value.trim(),
+      password: password.value
+    })
     auth.setSession(result)
 
     if (result.mustChangePassword) {
@@ -65,7 +68,7 @@ async function enviarRecuperacion() {
 
   resetLoading.value = true
   try {
-    await authService.forgotPassword(resetEmail.value.trim())
+    await authService.forgotPassword({ email: resetEmail.value.trim() })
   }
   catch (error) {
     // El backend responde igual exista o no la cuenta; solo avisamos si falla la red.
