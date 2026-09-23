@@ -51,6 +51,8 @@ export interface HttpRequestOptions {
   signal?: AbortSignal
   /** Milisegundos. Por defecto 15000. */
   timeout?: number
+  /** 'blob' para PDF/imágenes, 'text' para texto plano. Por defecto JSON. */
+  responseType?: 'json' | 'blob' | 'text'
 }
 
 export type HttpClient = <T = unknown>(path: string, options?: HttpRequestOptions) => Promise<T>
