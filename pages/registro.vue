@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useAuthService } from '~/services/auth/auth.service'
+import { useAuthService } from '~/services/authService'
 import { isApiError } from '~/services/api'
 
 definePageMeta({ layout: 'auth' })
