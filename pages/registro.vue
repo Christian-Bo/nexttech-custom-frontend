@@ -91,7 +91,7 @@ async function crearCuenta() {
     credencial.value = result.qrCredential
 
     snackbar.success('Tu cuenta fue creada. Te enviamos tu credencial.')
-    await navigateTo('/mi-cuenta')
+    await navigateTo('/mi-foto?nuevo=1')
   }
   catch (error) {
     errorMessage.value = isApiError(error) ? error.message : 'No se pudo crear la cuenta.'
