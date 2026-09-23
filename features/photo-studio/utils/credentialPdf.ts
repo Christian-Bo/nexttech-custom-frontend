@@ -81,7 +81,7 @@ export async function buildCredentialPdf(data: CredentialPdfData): Promise<Blob>
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(6)
   doc.setTextColor(148, 163, 184)
-  const footer = `ID ${data.buyerId ?? "-"}   |   Emitida ${formatIssuedAt(data.issuedAt)}`
+  const footer = `ID ${data.buyerId ?? '-'}   |   Emitida ${formatIssuedAt(data.issuedAt)}`
   doc.text(footer, W / 2, H - 4, { align: 'center' })
 
   return doc.output('blob')
