@@ -33,8 +33,10 @@ export function createAuthService(api: HttpClient) {
     forgotPassword: (body: ForgotPasswordRequestDto) =>
       api<ForgotPasswordResultDto>('/api/auth/forgot-password', { method: 'POST', body: { ...body } }),
 
-    resetPassword: (body: ResetPasswordRequestDto) =>
-      api<void>('/api/auth/reset-password', { method: 'POST', body: { ...body } }),
+    /** 204 sin cuerpo. */
+    resetPassword: async (body: ResetPasswordRequestDto): Promise<void> => {
+      await api('/api/auth/reset-password', { method: 'POST', body: { ...body } })
+    },
 
     /** Reto facial público (login sin JWT). */
     faceChallenge: () =>
