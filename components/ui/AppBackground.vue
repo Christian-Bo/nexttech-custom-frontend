@@ -20,7 +20,7 @@ const BLUE = '59, 130, 246'
 const CYAN = '6, 182, 212'
 const LINK_DISTANCE = 140
 
-let particles: Particle[] = []
+const particles: Particle[] = []
 let width = 0
 let height = 0
 let frame = 0
