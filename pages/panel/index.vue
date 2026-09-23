@@ -6,6 +6,7 @@ import { useDashboardService } from '~/features/dashboard/services/dashboardServ
 import KpiTile from '~/features/dashboard/components/KpiTile.vue'
 import SalesColumnChart from '~/features/dashboard/components/SalesColumnChart.vue'
 import StatusBreakdown from '~/features/dashboard/components/StatusBreakdown.vue'
+import ProductBreakdown from '~/features/dashboard/components/ProductBreakdown.vue'
 import RecentOrdersTable from '~/features/dashboard/components/RecentOrdersTable.vue'
 import { isApiError } from '~/services/api'
 import { formatQ, formatQCompact, formatTime } from '~/utils/format'
@@ -27,7 +28,7 @@ useHead({ title: 'Dashboard · NextTech Custom' })
 const service = useDashboardService()
 const realtime = useRealtime()
 
-const range = ref<DashboardRange>('7d')
+const range = ref<DashboardRange>('week')
 const data = ref<DashboardSummaryDto | null>(null)
 const loading = ref(true)
 const error = ref<ApiError | null>(null)
@@ -36,9 +37,9 @@ const flashing = ref<Set<string>>(new Set())
 const newOrders = ref<Set<number>>(new Set())
 
 const RANGES: { value: DashboardRange, label: string }[] = [
-  { value: 'today', label: 'Hoy' },
-  { value: '7d', label: '7 días' },
-  { value: '14d', label: '14 días' }
+  { value: 'day', label: 'Día' },
+  { value: 'week', label: 'Semana' },
+  { value: 'total', label: 'Total' }
 ]
 
 const kpis = computed(() => data.value?.kpis)
@@ -158,7 +159,7 @@ onMounted(() => void load())
           icon="mdi-cash-multiple"
           :value="formatQCompact(kpis.ventas)"
           :delta="kpis.deltaVentasPct"
-          hint="vs período anterior"
+          :hint="range === 'total' ? 'histórico' : range === 'day' ? 'vs ayer' : 'vs semana anterior'"
           :flash="flashing.has('ventas')"
         />
         <KpiTile
@@ -196,20 +197,21 @@ onMounted(() => void load())
       />
 
       <template v-else>
+        <v-card
+          border
+          variant="flat"
+          class="pa-5 mb-6"
+        >
+          <h2 class="text-subtitle-1 font-weight-bold">
+            Ventas por {{ range === 'day' ? 'hora' : 'día' }}
+          </h2>
+          <SalesColumnChart
+            :points="data.ventas"
+            :granularity="range === 'day' ? 'hour' : 'day'"
+          />
+        </v-card>
+
         <div class="charts mb-6">
-          <v-card
-            border
-            variant="flat"
-            class="pa-5"
-          >
-            <h2 class="text-subtitle-1 font-weight-bold">
-              Ventas por {{ range === 'today' ? 'hora' : 'día' }}
-            </h2>
-            <SalesColumnChart
-              :points="data.ventas"
-              :granularity="range === 'today' ? 'hour' : 'day'"
-            />
-          </v-card>
           <v-card
             border
             variant="flat"
@@ -219,6 +221,16 @@ onMounted(() => void load())
               Pedidos por estado
             </h2>
             <StatusBreakdown :estados="data.estados" />
+          </v-card>
+          <v-card
+            border
+            variant="flat"
+            class="pa-5"
+          >
+            <h2 class="text-subtitle-1 font-weight-bold mb-4">
+              Ventas por producto
+            </h2>
+            <ProductBreakdown :productos="data.productos" />
           </v-card>
         </div>
 
@@ -249,7 +261,7 @@ onMounted(() => void load())
 
 .charts {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
 }
 

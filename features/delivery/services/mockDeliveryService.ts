@@ -108,9 +108,14 @@ export function createMockDeliveryService(): DeliveryService {
       return { ok: true, message: 'QR verificado: es el comprador correcto.' }
     },
 
-    async findByQr(qr) {
+    async findByQr(input) {
       await delay(400)
-      const o = state.value.find(x => qrOf(x) === qr.trim())
+      // Acepta el contenido del QR ("NT-NTC-1042") o el código tecleado ("NTC-1042", "ntc1042", "1042").
+      const norm = input.trim().toUpperCase().replace(/^NT-/, '').replace(/[^A-Z0-9]/g, '')
+      const o = state.value.find(x => {
+        const code = x.codigoOrden.replace(/[^A-Z0-9]/gi, '').toUpperCase()
+        return code === norm || String(x.idOrden) === norm
+      })
       return o ? clone(o) : null
     },
 

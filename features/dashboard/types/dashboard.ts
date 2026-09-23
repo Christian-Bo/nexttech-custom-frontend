@@ -1,7 +1,8 @@
 /** Dashboard de operaciones. PROVISIONAL hasta el endpoint real (Integrante 3). */
 import type { OrderStatus } from '~/types/domain'
 
-export type DashboardRange = 'today' | '7d' | '14d'
+/** Enunciado 5.a: criterios por defecto día, semana y total. */
+export type DashboardRange = 'day' | 'week' | 'total'
 
 export interface DashboardKpisDto {
   ventas: number
@@ -14,7 +15,7 @@ export interface DashboardKpisDto {
 }
 
 export interface SalesPointDto {
-  /** ISO del inicio del día (o de la hora cuando range = today). */
+  /** ISO del inicio del día (o de la hora cuando range = day). */
   fecha: string
   total: number
   pedidos: number
@@ -23,6 +24,13 @@ export interface SalesPointDto {
 export interface StatusCountDto {
   estado: OrderStatus
   cantidad: number
+}
+
+/** Ventas agrupadas por tipo de producto (enunciado 5.a). */
+export interface ProductSalesDto {
+  producto: string
+  unidades: number
+  total: number
 }
 
 export interface RecentOrderDto {
@@ -39,6 +47,7 @@ export interface DashboardSummaryDto {
   kpis: DashboardKpisDto
   ventas: SalesPointDto[]
   estados: StatusCountDto[]
+  productos: ProductSalesDto[]
   ultimos: RecentOrderDto[]
 }
 

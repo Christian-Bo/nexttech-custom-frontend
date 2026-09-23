@@ -105,7 +105,8 @@ function seed(): MockOrder[] {
     [1042, 'maria_fer', 'Llavero acrílico circular', 85, 'LISTO_PARA_ENTREGA', 'EFECTIVO', 180],
     [1043, 'luisg', 'Llavero metálico cuadrado', 35, 'LISTO_PARA_ENTREGA', 'TARJETA', 140],
     [1044, 'camila.r', 'Photocard', 120, 'EN_ENTREGA', 'EFECTIVO', 95],
-    [1045, 'diego_dev', 'Llavero acrílico circular', 45, 'EN_ELABORACION', 'TARJETA', 60]
+    [1045, 'diego_dev', 'Llavero acrílico circular', 45, 'EN_ELABORACION', 'TARJETA', 60],
+    [1046, 'sofi22', 'Photocard', 30, 'ORDEN_GENERADA', 'TARJETA', 5]
   ]
   for (const [idOrden, nick, producto, total, estado, metodo, minsAgo] of fixed) {
     const created = now - minsAgo * 60_000
@@ -183,7 +184,7 @@ export function useMockOrders() {
       createRandomOrder()
       return
     }
-    const active = orders.value.filter(o => FLOW.indexOf(o.estado) >= 0 && o.estado !== 'ENTREGADO' && !['NTC-1042', 'NTC-1043', 'NTC-1044', 'NTC-1045'].includes(o.codigoOrden))
+    const active = orders.value.filter(o => FLOW.indexOf(o.estado) >= 0 && o.estado !== 'ENTREGADO' && !['NTC-1042', 'NTC-1043', 'NTC-1044', 'NTC-1045', 'NTC-1046'].includes(o.codigoOrden))
     const pick = active[Math.floor(Math.random() * active.length)]
     if (pick) advance(pick)
   }

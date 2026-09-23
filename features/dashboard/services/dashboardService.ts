@@ -1,4 +1,4 @@
-import type { DashboardRange, DashboardService, DashboardSummaryDto, SalesPointDto, StatusCountDto } from '../types/dashboard'
+import type { DashboardRange, DashboardService, DashboardSummaryDto, ProductSalesDto, SalesPointDto, StatusCountDto } from '../types/dashboard'
 import type { OrderStatus } from '~/types/domain'
 import { useMockOrders } from '~/services/mock/mockOrders'
 import { useApi } from '~/services/api'
@@ -18,19 +18,21 @@ function createMockDashboardService(): DashboardService {
     async getSummary(range: DashboardRange) {
       await new Promise(r => setTimeout(r, 350))
       const now = Date.now()
-      const days = range === 'today' ? 1 : range === '7d' ? 7 : 14
+      const all = orders.value
+      const firstDay = startOfDay(Math.min(...all.map(o => Date.parse(o.fechaCreacion))))
+      // Día = hoy; Semana = últimos 7 días; Total = todo el histórico.
+      const days = range === 'day' ? 1 : range === 'week' ? 7 : Math.round((startOfDay(now) - firstDay) / DAY) + 1
       const from = startOfDay(now) - (days - 1) * DAY
       const prevFrom = from - days * DAY
-      const all = orders.value
       const inRange = all.filter(o => Date.parse(o.fechaCreacion) >= from)
-      const prev = all.filter(o => { const t = Date.parse(o.fechaCreacion); return t >= prevFrom && t < from })
+      const prev = range === 'total' ? [] : all.filter(o => { const t = Date.parse(o.fechaCreacion); return t >= prevFrom && t < from })
 
       const ventas = inRange.reduce((s, o) => s + o.total, 0)
       const ventasPrev = prev.reduce((s, o) => s + o.total, 0)
 
       // Serie: por hora si es hoy, por día si es rango.
       const buckets: SalesPointDto[] = []
-      if (range === 'today') {
+      if (range === 'day') {
         for (let h = 7; h <= 20; h++) {
           const start = from + h * 3_600_000
           const items = inRange.filter(o => { const t = Date.parse(o.fechaCreacion); return t >= start && t < start + 3_600_000 })
@@ -47,6 +49,15 @@ function createMockDashboardService(): DashboardService {
 
       const estados: StatusCountDto[] = STATUS_ORDER.map(estado => ({ estado, cantidad: inRange.filter(o => o.estado === estado).length }))
 
+      const byProduct = new Map<string, ProductSalesDto>()
+      for (const o of inRange) {
+        const row = byProduct.get(o.producto) ?? { producto: o.producto, unidades: 0, total: 0 }
+        row.unidades += o.cantidad
+        row.total += o.total
+        byProduct.set(o.producto, row)
+      }
+      const productos = [...byProduct.values()].sort((a, b) => b.total - a.total)
+
       const summary: DashboardSummaryDto = {
         kpis: {
           ventas,
@@ -58,6 +69,7 @@ function createMockDashboardService(): DashboardService {
         },
         ventas: buckets,
         estados,
+        productos,
         ultimos: [...inRange]
           .sort((a, b) => b.fechaCreacion.localeCompare(a.fechaCreacion))
           .slice(0, 8)

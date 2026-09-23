@@ -67,8 +67,8 @@ export interface DeliveryService {
   startDelivery: (idOrden: number) => Promise<DeliveryOrderDto>
   /** Valida el QR que muestra el comprador contra la orden. */
   validateOrderQr: (idOrden: number, qr: string) => Promise<{ ok: boolean, message: string }>
-  /** Busca la orden asignada a la que pertenece un QR (escaneo rápido). */
-  findByQr: (qr: string) => Promise<DeliveryOrderDto | null>
+  /** Busca una orden asignada por QR escaneado o por código tecleado (enunciado 4.a). */
+  findByQr: (qrOrCode: string) => Promise<DeliveryOrderDto | null>
   complete: (idOrden: number, body: CompleteDeliveryRequest) => Promise<DeliveryOrderDto>
   reportFailed: (idOrden: number, body: FailedDeliveryRequest) => Promise<DeliveryOrderDto>
 }

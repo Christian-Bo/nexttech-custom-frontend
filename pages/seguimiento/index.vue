@@ -54,7 +54,7 @@ function go(): void {
       v-if="config.public.useMocks"
       class="text-caption text-medium-emphasis mt-4"
     >
-      Demo: prueba NTC-1042 (listo), NTC-1044 (en camino) o NTC-1045 (en elaboración).
+      Demo: prueba NTC-1046 (recibido), NTC-1045 (en elaboración), NTC-1042 (listo) o NTC-1044 (en camino).
     </p>
   </v-container>
 </template>

@@ -6,7 +6,7 @@ import type { DeliveryOrderDto } from '~/features/delivery/types/delivery'
 import { useDeliveryService } from '~/features/delivery/services/deliveryService'
 import DeliveryOrderCard from '~/features/delivery/components/DeliveryOrderCard.vue'
 
-definePageMeta({ layout: 'repartidor' })
+definePageMeta({ layout: 'repartidor', middleware: 'repartidor' })
 useHead({ title: 'Pedidos · Repartidor' })
 
 const service = useDeliveryService()

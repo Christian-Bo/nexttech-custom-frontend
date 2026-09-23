@@ -80,8 +80,8 @@ function useOnline() {
         value="scan"
         to="/repartidor/escanear"
       >
-        <v-icon icon="mdi-qrcode-scan" />
-        <span>Escanear</span>
+        <v-icon icon="mdi-magnify-scan" />
+        <span>Buscar</span>
       </v-btn>
     </v-bottom-navigation>
 
