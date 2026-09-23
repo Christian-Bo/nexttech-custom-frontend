@@ -9,7 +9,10 @@ const auth = useAuthStore()
 const authService = useAuthService()
 const snackbar = useSnackbar()
 
-/** Credencial QR devuelta por el backend; la usa la pantalla de credencial. */
+/** Paso visible del registro. */
+const paso = ref<'datos' | 'foto' | 'credencial'>('datos')
+
+/** Credencial QR devuelta por el backend al registrarse. */
 const credencial = useState<string | null>('nt-registro-credencial', () => null)
 
 const form = reactive({
@@ -48,6 +51,17 @@ const algunCanal = computed(() => form.notifyByEmail || form.notifyByWhatsApp)
 
 /** Nadie menor de edad ni fechas futuras. */
 const maxBirthDate = new Date().toISOString().slice(0, 10)
+
+/** Al terminar el enrolamiento facial pasamos a la credencial. */
+function rostroRegistrado() {
+  paso.value = 'credencial'
+}
+
+/** La foto es opcional para terminar el registro. */
+async function omitirFoto() {
+  snackbar.info('Puedes registrar tu rostro después desde tu cuenta.')
+  await navigateTo('/mi-cuenta')
+}
 
 function validar(): string | null {
   if (!form.email.trim() || !form.phone.trim() || !form.nickname.trim() || !form.password) {
@@ -90,8 +104,8 @@ async function crearCuenta() {
     auth.setSession(result.token)
     credencial.value = result.qrCredential
 
-    snackbar.success('Tu cuenta fue creada. Te enviamos tu credencial.')
-    await navigateTo('/mi-cuenta')
+    snackbar.success('Tu cuenta fue creada.')
+    paso.value = 'foto'
   }
   catch (error) {
     errorMessage.value = isApiError(error) ? error.message : 'No se pudo crear la cuenta.'
@@ -104,157 +118,231 @@ async function crearCuenta() {
 
 <template>
   <div>
-    <!-- Avance del registro: los pasos 2 y 3 se construyen después -->
+    <!-- Avance del registro -->
     <ol class="pasos">
-      <li class="pasos__item pasos__item--activo">
+      <li
+        class="pasos__item"
+        :class="{ 'pasos__item--activo': paso === 'datos' }"
+      >
         <span class="pasos__num">1</span> Datos
       </li>
-      <li class="pasos__item">
+      <li
+        class="pasos__item"
+        :class="{ 'pasos__item--activo': paso === 'foto' }"
+      >
         <span class="pasos__num">2</span> Foto
       </li>
-      <li class="pasos__item">
+      <li
+        class="pasos__item"
+        :class="{ 'pasos__item--activo': paso === 'credencial' }"
+      >
         <span class="pasos__num">3</span> Credencial
       </li>
     </ol>
 
-    <h1 class="text-h4 font-weight-bold mb-2">
-      Crea tu cuenta
-    </h1>
-    <p class="text-medium-emphasis mb-6">
-      Con una sola cuenta compras, sigues tu pedido y lo recibes en el campus.
-    </p>
+    <!-- PASO 1: datos de la cuenta -->
+    <template v-if="paso === 'datos'">
+      <h1 class="text-h4 font-weight-bold mb-2">
+        Crea tu cuenta
+      </h1>
+      <p class="text-medium-emphasis mb-6">
+        Con una sola cuenta compras, sigues tu pedido y lo recibes en el campus.
+      </p>
 
-    <v-form @submit.prevent="crearCuenta">
-      <v-text-field
-        v-model="form.email"
-        label="Correo electrónico"
-        type="email"
-        autocomplete="email"
-        prepend-inner-icon="mdi-email-outline"
-        variant="outlined"
-        color="accent"
-        :rules="[rules.required, rules.email]"
-        :disabled="loading"
-      />
-
-      <v-text-field
-        v-model="form.phone"
-        label="Teléfono"
-        type="tel"
-        autocomplete="tel"
-        prepend-inner-icon="mdi-whatsapp"
-        variant="outlined"
-        color="accent"
-        hint="Para avisarte por WhatsApp, si lo activas abajo."
-        :rules="[rules.required, rules.phone]"
-        :disabled="loading"
-      />
-
-      <v-text-field
-        v-model="form.nickname"
-        label="Nickname"
-        autocomplete="username"
-        prepend-inner-icon="mdi-account-outline"
-        variant="outlined"
-        color="accent"
-        hint="Así te identificamos al iniciar sesión."
-        :rules="[rules.required, rules.nickname]"
-        :disabled="loading"
-      />
-
-      <v-text-field
-        v-model="form.birthDate"
-        label="Fecha de nacimiento (opcional)"
-        type="date"
-        prepend-inner-icon="mdi-cake-variant-outline"
-        variant="outlined"
-        color="accent"
-        :max="maxBirthDate"
-        :disabled="loading"
-      />
-
-      <v-text-field
-        v-model="form.password"
-        label="Contraseña"
-        autocomplete="new-password"
-        prepend-inner-icon="mdi-lock-outline"
-        variant="outlined"
-        color="accent"
-        :type="showPassword ? 'text' : 'password'"
-        :append-inner-icon="showPassword ? 'mdi-eye-off-outline' : 'mdi-eye-outline'"
-        hint="Mínimo 8 caracteres, con mayúscula, minúscula y número."
-        :rules="[rules.required, rules.passwordLength, rules.passwordStrength]"
-        :disabled="loading"
-        @click:append-inner="showPassword = !showPassword"
-      />
-
-      <v-text-field
-        v-model="form.passwordConfirm"
-        label="Repite la contraseña"
-        autocomplete="new-password"
-        prepend-inner-icon="mdi-lock-check-outline"
-        variant="outlined"
-        color="accent"
-        :type="showPassword ? 'text' : 'password'"
-        :error-messages="passwordsMatch ? [] : ['Las contraseñas no coinciden.']"
-        :disabled="loading"
-      />
-
-      <fieldset class="canales">
-        <legend class="text-body-2 text-medium-emphasis mb-1">
-          ¿Cómo quieres recibir tus avisos?
-        </legend>
-        <v-checkbox
-          v-model="form.notifyByEmail"
+      <v-form @submit.prevent="crearCuenta">
+        <v-text-field
+          v-model="form.email"
           label="Correo electrónico"
+          type="email"
+          autocomplete="email"
+          prepend-inner-icon="mdi-email-outline"
+          variant="outlined"
           color="accent"
-          density="compact"
-          hide-details
+          :rules="[rules.required, rules.email]"
           :disabled="loading"
         />
-        <v-checkbox
-          v-model="form.notifyByWhatsApp"
-          label="WhatsApp"
-          color="accent"
-          density="compact"
-          hide-details
-          :disabled="loading"
-        />
-        <p
-          v-if="!algunCanal"
-          class="text-caption text-error mt-1"
-        >
-          Elige al menos uno.
-        </p>
-      </fieldset>
 
-      <v-alert
-        v-if="errorMessage"
-        type="error"
-        variant="tonal"
-        density="comfortable"
-        class="mb-4"
+        <v-text-field
+          v-model="form.phone"
+          label="Teléfono"
+          type="tel"
+          autocomplete="tel"
+          prepend-inner-icon="mdi-whatsapp"
+          variant="outlined"
+          color="accent"
+          hint="Para avisarte por WhatsApp, si lo activas abajo."
+          :rules="[rules.required, rules.phone]"
+          :disabled="loading"
+        />
+
+        <v-text-field
+          v-model="form.nickname"
+          label="Nickname"
+          autocomplete="username"
+          prepend-inner-icon="mdi-account-outline"
+          variant="outlined"
+          color="accent"
+          hint="Así te identificamos al iniciar sesión."
+          :rules="[rules.required, rules.nickname]"
+          :disabled="loading"
+        />
+
+        <v-text-field
+          v-model="form.birthDate"
+          label="Fecha de nacimiento (opcional)"
+          type="date"
+          prepend-inner-icon="mdi-cake-variant-outline"
+          variant="outlined"
+          color="accent"
+          :max="maxBirthDate"
+          :disabled="loading"
+        />
+
+        <v-text-field
+          v-model="form.password"
+          label="Contraseña"
+          autocomplete="new-password"
+          prepend-inner-icon="mdi-lock-outline"
+          variant="outlined"
+          color="accent"
+          :type="showPassword ? 'text' : 'password'"
+          :append-inner-icon="showPassword ? 'mdi-eye-off-outline' : 'mdi-eye-outline'"
+          hint="Mínimo 8 caracteres, con mayúscula, minúscula y número."
+          :rules="[rules.required, rules.passwordLength, rules.passwordStrength]"
+          :disabled="loading"
+          @click:append-inner="showPassword = !showPassword"
+        />
+
+        <v-text-field
+          v-model="form.passwordConfirm"
+          label="Repite la contraseña"
+          autocomplete="new-password"
+          prepend-inner-icon="mdi-lock-check-outline"
+          variant="outlined"
+          color="accent"
+          :type="showPassword ? 'text' : 'password'"
+          :error-messages="passwordsMatch ? [] : ['Las contraseñas no coinciden.']"
+          :disabled="loading"
+        />
+
+        <fieldset class="canales">
+          <legend class="text-body-2 text-medium-emphasis mb-1">
+            ¿Cómo quieres recibir tus avisos?
+          </legend>
+          <v-checkbox
+            v-model="form.notifyByEmail"
+            label="Correo electrónico"
+            color="accent"
+            density="compact"
+            hide-details
+            :disabled="loading"
+          />
+          <v-checkbox
+            v-model="form.notifyByWhatsApp"
+            label="WhatsApp"
+            color="accent"
+            density="compact"
+            hide-details
+            :disabled="loading"
+          />
+          <p
+            v-if="!algunCanal"
+            class="text-caption text-error mt-1"
+          >
+            Elige al menos uno.
+          </p>
+        </fieldset>
+
+        <v-alert
+          v-if="errorMessage"
+          type="error"
+          variant="tonal"
+          density="comfortable"
+          class="mb-4"
+        >
+          {{ errorMessage }}
+        </v-alert>
+
+        <v-btn
+          type="submit"
+          color="primary"
+          variant="flat"
+          size="large"
+          block
+          class="text-none"
+          :loading="loading"
+        >
+          Crear cuenta
+        </v-btn>
+      </v-form>
+
+      <p class="text-center mt-8">
+        ¿Ya tienes cuenta?
+        <NuxtLink to="/login">Inicia sesión</NuxtLink>
+      </p>
+    </template>
+
+    <!-- PASO 2: foto y registro del rostro (componentes del integrante 5) -->
+    <template v-else-if="paso === 'foto'">
+      <h1 class="text-h4 font-weight-bold mb-2">
+        Tu foto
+      </h1>
+      <p class="text-medium-emphasis mb-6">
+        Con tu rostro registrado podrás entrar sin contraseña y obtener tu credencial.
+      </p>
+
+      <FaceEnrollCard @enrolled="rostroRegistrado" />
+
+      <div class="text-center mt-6">
+        <v-btn
+          variant="text"
+          class="text-none"
+          @click="omitirFoto"
+        >
+          Lo hago después
+        </v-btn>
+      </div>
+    </template>
+
+    <!-- PASO 3: credencial con QR -->
+    <template v-else>
+      <h1 class="text-h4 font-weight-bold mb-2">
+        Tu credencial
+      </h1>
+      <p class="text-medium-emphasis mb-6">
+        Descarga tu credencial en PDF. Trae tu foto y el código QR con el que puedes iniciar sesión y recoger tus pedidos.
+      </p>
+
+      <v-card
+        variant="flat"
+        border
+        rounded="lg"
+        class="pa-6 text-center"
       >
-        {{ errorMessage }}
-      </v-alert>
+        <v-icon
+          icon="mdi-card-account-details-outline"
+          size="48"
+          class="mb-4"
+          color="primary"
+        />
+        <p class="text-body-2 text-medium-emphasis mb-6">
+          También te la enviamos al correo que registraste. Guárdala en un lugar seguro:
+          quien tenga ese QR puede entrar a tu cuenta.
+        </p>
+        <CredentialDownloadButton />
+      </v-card>
 
       <v-btn
-        type="submit"
         color="primary"
         variant="flat"
         size="large"
         block
-        class="text-none"
-        :loading="loading"
+        class="text-none mt-6"
+        to="/mi-cuenta"
       >
-        Crear cuenta
+        Ir a mi cuenta
       </v-btn>
-    </v-form>
-
-    <p class="text-center mt-8">
-      ¿Ya tienes cuenta?
-      <NuxtLink to="/login">Inicia sesión</NuxtLink>
-    </p>
+    </template>
   </div>
 </template>
 
