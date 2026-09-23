@@ -79,7 +79,12 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     public: {
-      apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8080'
+      apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8080',
+      // Datos simulados para módulos sin endpoints aún (tracking, dashboard, tiempo real).
+      // Poner NUXT_PUBLIC_USE_MOCKS=false cuando Integrante 3 publique la API y el hub.
+      useMocks: process.env.NUXT_PUBLIC_USE_MOCKS !== 'false',
+      // Ruta del hub de SignalR (PROVISIONAL, confirmar con Integrante 3).
+      realtimeHubPath: process.env.NUXT_PUBLIC_REALTIME_HUB_PATH || '/hubs/orders'
     }
   }
 })
