@@ -10,7 +10,7 @@ const snackbar = useSnackbar()
 async function logout(): Promise<void> {
   auth.clearSession()
   snackbar.info('Cerraste sesión.')
-  await navigateTo('/login?tipo=interno')
+  await navigateTo('/login')
 }
 
 const nav = computed(() => {

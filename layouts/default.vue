@@ -51,7 +51,7 @@ async function logout(): Promise<void> {
   auth.clearSession()
   cart.reset()
   snackbar.info('Cerraste sesión.')
-  await navigateTo(wasInternal ? '/login?tipo=interno' : '/')
+  await navigateTo(wasInternal ? '/login' : '/')
 }
 
 onMounted(() => void cart.load().catch(() => {}))
@@ -177,11 +177,6 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
                 to="/login"
                 prepend-icon="mdi-login"
                 title="Ingresar"
-              />
-              <v-list-item
-                to="/login?tipo=interno"
-                prepend-icon="mdi-badge-account-horizontal-outline"
-                title="Acceso del personal"
               />
               <v-list-item
                 to="/registro"
