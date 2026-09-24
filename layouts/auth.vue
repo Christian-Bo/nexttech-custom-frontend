@@ -7,12 +7,15 @@
         <BrandLogo size="large" />
 
         <div class="auth__pitch">
-          <p class="auth__title">
-            Diseña tu llavero por los dos lados.
-          </p>
-          <p class="auth__text">
-            Una sola cuenta para comprar, seguir tu pedido y recibirlo dentro del campus.
-          </p>
+          <AuthShowcase />
+          <div>
+            <p class="auth__title">
+              Diseña tu llavero por los dos lados.
+            </p>
+            <p class="auth__text">
+              Una sola cuenta para comprar, seguir tu pedido y recibirlo dentro del campus.
+            </p>
+          </div>
         </div>
       </aside>
 
@@ -65,14 +68,22 @@
   .auth__brand {
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
     padding: 2.5rem 3rem;
+    background:
+      radial-gradient(circle at 20% 30%, rgb(37 99 235 / 22%), transparent 55%),
+      radial-gradient(circle at 80% 85%, rgb(6 182 212 / 14%), transparent 50%),
+      rgb(30 41 59 / 92%);
     border-right: 1px solid var(--nt-border);
     border-bottom: none;
   }
 
   .auth__pitch {
-    display: block;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    gap: 36px;
+    padding-block: 32px;
   }
 
   .auth__title {

@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import type { ApiError } from '~/types/api'
 import type { OrderTrackingDto } from '../types/tracking'
 import { useTrackingService } from '../services/trackingService'
+import { useReceiptService } from '../services/receiptService'
 import OrderTimeline from './OrderTimeline.vue'
 import DeliveryQrCard from './DeliveryQrCard.vue'
 import { isApiError } from '~/services/api'
@@ -16,6 +17,22 @@ const service = useTrackingService()
 const realtime = useRealtime()
 const snackbar = useSnackbar()
 const config = useRuntimeConfig()
+const receipt = useReceiptService()
+const downloading = ref(false)
+
+async function downloadReceipt(): Promise<void> {
+  if (!order.value) return
+  downloading.value = true
+  try {
+    await receipt.download(order.value.codigoOrden)
+  }
+  catch (e) {
+    snackbar.error(isApiError(e) ? e : 'No se pudo descargar la constancia.')
+  }
+  finally {
+    downloading.value = false
+  }
+}
 
 const order = ref<OrderTrackingDto | null>(null)
 const loading = ref(true)
@@ -157,6 +174,40 @@ onMounted(async () => {
             :value="order.qrEntrega"
             :codigo-orden="order.codigoOrden"
           />
+
+          <!-- Constancia (ticket) con el QR de entrega -->
+          <v-card
+            border
+            variant="flat"
+            class="pa-4"
+          >
+            <div class="d-flex align-center ga-3">
+              <v-icon
+                icon="mdi-receipt-text-check-outline"
+                color="accent"
+                size="28"
+              />
+              <div class="flex-1-1">
+                <div class="font-weight-medium">
+                  Constancia de compra
+                </div>
+                <div class="text-body-2 text-medium-emphasis">
+                  {{ order.qrEntrega ? 'PDF con tu código y QR de entrega.' : 'PDF con tu código y QR de entrega. El QR también aparece aquí cuando tu pedido esté listo.' }}
+                </div>
+              </div>
+            </div>
+            <v-btn
+              block
+              variant="tonal"
+              color="primary"
+              class="text-none mt-3"
+              prepend-icon="mdi-file-download-outline"
+              :loading="downloading"
+              @click="downloadReceipt"
+            >
+              Descargar constancia (PDF)
+            </v-btn>
+          </v-card>
 
           <v-card
             border

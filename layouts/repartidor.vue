@@ -4,6 +4,14 @@ import { computed } from 'vue'
 /** Shell móvil del repartidor: barra superior + navegación inferior. */
 const route = useRoute()
 const online = useOnline()
+const auth = useAuthStore()
+const snackbar = useSnackbar()
+
+async function logout(): Promise<void> {
+  auth.clearSession()
+  snackbar.info('Cerraste sesión.')
+  await navigateTo('/login?tipo=interno')
+}
 
 const nav = computed(() => {
   if (route.path.startsWith('/repartidor/escanear')) return 'scan'
@@ -53,6 +61,15 @@ function useOnline() {
         >
           {{ online ? 'En línea' : 'Sin conexión' }}
         </v-chip>
+        <v-btn
+          v-if="auth.isAuthenticated"
+          icon="mdi-logout"
+          variant="text"
+          size="small"
+          aria-label="Cerrar sesión"
+          class="mr-1"
+          @click="logout"
+        />
       </template>
     </v-app-bar>
 
