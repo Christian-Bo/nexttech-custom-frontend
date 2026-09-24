@@ -8,7 +8,17 @@ import { formatQ } from '~/utils/format'
 
 useHead({ title: 'Catálogo · NextTech Custom' })
 
+const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
 const catalog = useShopCatalog()
+/** Bienvenida al terminar el registro (/catalogo?bienvenida=1). */
+const welcome = ref(route.query.bienvenida === '1')
+
+function closeWelcome(): void {
+  welcome.value = false
+  void router.replace({ query: {} })
+}
 const products = ref<ProductSummary[]>([])
 const loading = ref(true)
 const error = ref<ApiError | null>(null)
@@ -47,6 +57,54 @@ onMounted(load)
     class="py-8"
     style="max-width: 1200px"
   >
+    <v-expand-transition>
+      <section
+        v-if="welcome"
+        class="welcome mb-8"
+        role="status"
+      >
+        <span
+          class="welcome__confetti"
+          aria-hidden="true"
+        >🎉</span>
+        <div class="welcome__body">
+          <h2 class="text-h5 font-weight-bold">
+            ¡Bienvenido a NextTech Custom{{ auth.nickname ? `, ${auth.nickname}` : '' }}!
+          </h2>
+          <p class="text-medium-emphasis mt-1">
+            Tu cuenta está lista. Te enviamos un correo de bienvenida con tu credencial.
+            Elige tu primer producto, diséñalo por los dos lados y recíbelo en el campus.
+          </p>
+          <div class="d-flex flex-wrap ga-2 mt-4">
+            <v-btn
+              color="primary"
+              class="text-none"
+              prepend-icon="mdi-palette-outline"
+              to="/personalizar"
+            >
+              Diseñar mi primer llavero
+            </v-btn>
+            <v-btn
+              variant="tonal"
+              class="text-none"
+              prepend-icon="mdi-card-account-details-outline"
+              to="/mi-foto"
+            >
+              Mi credencial
+            </v-btn>
+          </div>
+        </div>
+        <v-btn
+          icon="mdi-close"
+          variant="text"
+          size="small"
+          class="welcome__close"
+          aria-label="Cerrar bienvenida"
+          @click="closeWelcome"
+        />
+      </section>
+    </v-expand-transition>
+
     <header class="mb-6">
       <h1 class="text-h4 font-weight-bold">
         Catálogo
@@ -174,6 +232,42 @@ onMounted(load)
 </template>
 
 <style scoped>
+.welcome {
+  position: relative;
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  padding: 24px;
+  border-radius: 20px;
+  border: 1px solid rgb(6 182 212 / 45%);
+  background:
+    radial-gradient(circle at 0% 0%, rgb(6 182 212 / 25%), transparent 55%),
+    radial-gradient(circle at 100% 100%, rgb(37 99 235 / 30%), transparent 55%),
+    rgb(30 41 59 / 92%);
+  box-shadow: 0 0 40px -16px rgb(6 182 212 / 60%);
+}
+
+.welcome__confetti {
+  font-size: 2.6rem;
+  line-height: 1;
+  animation: pop 0.6s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+.welcome__body {
+  flex: 1;
+}
+
+.welcome__close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+@keyframes pop {
+  from { transform: scale(0.3) rotate(-30deg); opacity: 0; }
+  to { transform: scale(1) rotate(0); opacity: 1; }
+}
+
 .filters {
   display: flex;
   flex-wrap: wrap;

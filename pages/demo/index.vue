@@ -25,7 +25,8 @@ const MODULES = [
   { to: '/panel', icon: 'mdi-view-dashboard-outline', title: 'Dashboard de operaciones', text: 'KPIs en vivo, ventas por día, pedidos por estado y últimos pedidos.' },
   { to: '/panel/presentacion', icon: 'mdi-presentation', title: 'Dashboard en pantalla completa', text: 'Modo presentación con cifras grandes, reloj y actualización automática.' },
   { to: '/panel/produccion', icon: 'mdi-hammer-wrench', title: 'Producción (supervisor)', text: 'Cola de elaboración con cronómetro de 60 s y "Marcar listo para entrega".' },
-  { to: '/interno', icon: 'mdi-badge-account-horizontal-outline', title: 'Acceso del personal', text: 'Login de repartidor, supervisor y admin, con cambio obligatorio de contraseña.' }
+  { to: '/login?tipo=interno', icon: 'mdi-badge-account-horizontal-outline', title: 'Acceso del personal', text: 'Una sola pantalla de login con modo Comprador / Personal interno y cambio obligatorio de contraseña.' },
+  { to: '/admin', icon: 'mdi-shield-account-outline', title: 'Administración', text: 'Usuarios internos (crear, editar, activar, desbloquear, restablecer contraseña) y auditoría.' }
 ]
 
 async function probarConfirm() {

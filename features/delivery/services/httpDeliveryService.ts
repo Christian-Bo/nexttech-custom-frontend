@@ -89,7 +89,7 @@ export function createHttpDeliveryService(api: HttpClient): DeliveryService {
   }
 
   return {
-    capabilities: { paymentFailure: false },
+    capabilities: { paymentFailure: true },
 
     async listAssigned() {
       const available = await api<OrdenColaApi[]>('/api/delivery/available')
@@ -132,7 +132,9 @@ export function createHttpDeliveryService(api: HttpClient): DeliveryService {
     },
 
     async reportFailed(codigo, body) {
-      await api(`/api/delivery/${enc(codigo)}/not-found`, { method: 'POST', body: { observacion: body.observacion } })
+      // Comprador no encontrado y pago no realizado son dos resultados distintos en el backend.
+      const action = body.resultado === 'PAGO_NO_REALIZADO' ? 'payment-failed' : 'not-found'
+      await api(`/api/delivery/${enc(codigo)}/${action}`, { method: 'POST', body: { observacion: body.observacion } })
       writeMine(readMine().filter(c => c !== codigo))
       const order = await getOrder(codigo)
       return { ...order, ultimoIntento: { resultado: body.resultado, fechaHoraFin: new Date().toISOString(), observacion: body.observacion } }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from 'vue'
 import { useDisplay } from 'vuetify'
+import { INTERNAL_ROLES } from '~/types/auth'
 
 const auth = useAuthStore()
 const cart = useCartStore()
@@ -9,25 +10,48 @@ const route = useRoute()
 const { smAndDown } = useDisplay()
 const useMocks = !!useRuntimeConfig().public.useMocks
 
-const NAV = [
+const SHOP_NAV = [
   { to: '/catalogo', label: 'Catálogo', icon: 'mdi-storefront-outline' },
   { to: '/personalizar', label: 'Personalizar', icon: 'mdi-palette-outline' },
   { to: '/seguimiento', label: 'Seguimiento', icon: 'mdi-map-marker-path' }
 ]
 
-/** El carrito solo aplica al comprador (o al modo demo). */
-const showCart = computed(() => useMocks || auth.isBuyer || !auth.isAuthenticated)
+/**
+ * Menú según el rol (solo experiencia de uso: el backend valida cada acción con sus policies).
+ */
+const NAV = computed(() => {
+  if (!auth.isInternal) return SHOP_NAV
+  if (auth.hasRole(INTERNAL_ROLES.DELIVERY_DRIVER)) return [{ to: '/repartidor', label: 'Entregas', icon: 'mdi-moped-outline' }]
+  const staff = [
+    { to: '/panel', label: 'Dashboard', icon: 'mdi-view-dashboard-outline' },
+    { to: '/panel/produccion', label: 'Producción', icon: 'mdi-hammer-wrench' }
+  ]
+  return auth.hasRole(INTERNAL_ROLES.ADMIN)
+    ? [{ to: '/admin', label: 'Administración', icon: 'mdi-shield-account-outline' }, ...staff]
+    : staff
+})
+
+/** El carrito solo aplica al comprador (o al modo demo sin sesión de personal). */
+const showCart = computed(() => !auth.isInternal && (useMocks || auth.isBuyer || !auth.isAuthenticated))
 const isStaff = computed(() => auth.isInternal)
 
+const roleLabel = computed(() => {
+  if (auth.hasRole(INTERNAL_ROLES.ADMIN)) return 'Administrador'
+  if (auth.hasRole(INTERNAL_ROLES.SUPERVISOR)) return 'Supervisor'
+  if (auth.hasRole(INTERNAL_ROLES.DELIVERY_DRIVER)) return 'Repartidor'
+  return null
+})
+
 function isActive(to: string): boolean {
-  return route.path === to || route.path.startsWith(`${to}/`)
+  return route.path === to || (to !== '/panel' && route.path.startsWith(`${to}/`))
 }
 
 async function logout(): Promise<void> {
+  const wasInternal = auth.isInternal
   auth.clearSession()
   cart.reset()
   snackbar.info('Cerraste sesión.')
-  await navigateTo('/')
+  await navigateTo(wasInternal ? '/login?tipo=interno' : '/')
 }
 
 onMounted(() => void cart.load().catch(() => {}))
@@ -91,7 +115,7 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
               :aria-label="smAndDown ? 'Mi cuenta' : undefined"
             >
               <template v-if="!smAndDown">
-                {{ auth.nickname ?? 'Mi cuenta' }}
+                {{ auth.nickname ?? roleLabel ?? 'Mi cuenta' }}
               </template>
             </v-btn>
             <v-btn
@@ -118,9 +142,9 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
             </template>
             <template v-if="isStaff">
               <v-list-item
-                to="/panel"
-                prepend-icon="mdi-view-dashboard-outline"
-                title="Panel"
+                :title="auth.nickname ?? 'Personal'"
+                :subtitle="roleLabel ?? undefined"
+                prepend-icon="mdi-badge-account-horizontal-outline"
               />
             </template>
             <template v-else-if="auth.isAuthenticated">
@@ -153,6 +177,11 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
                 to="/login"
                 prepend-icon="mdi-login"
                 title="Ingresar"
+              />
+              <v-list-item
+                to="/login?tipo=interno"
+                prepend-icon="mdi-badge-account-horizontal-outline"
+                title="Acceso del personal"
               />
               <v-list-item
                 to="/registro"
