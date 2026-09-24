@@ -30,6 +30,8 @@ const { confirm } = useConfirm()
 const qr = useCredentialQr()
 
 const isNew = computed(() => route.query.nuevo === '1')
+/** Al terminar el registro se llega al catálogo con la bienvenida. */
+const welcomeLink = computed(() => (isNew.value ? '/catalogo?bienvenida=1' : '/catalogo'))
 const portrait = ref<StoredPortrait | null>(null)
 const step = ref<'foto' | 'credencial'>('foto')
 const downloading = ref(false)
@@ -129,6 +131,19 @@ async function download(): Promise<void> {
         Recorta tu rostro y dale tu estilo con filtros y stickers. Esta foto aparecerá en tu credencial.
       </p>
       <PortraitStudio @saved="onSaved" />
+      <div
+        v-if="isNew"
+        class="text-center mt-6"
+      >
+        <v-btn
+          :to="welcomeLink"
+          variant="text"
+          class="text-none text-medium-emphasis"
+          append-icon="mdi-arrow-right"
+        >
+          Omitir por ahora e ir al catálogo
+        </v-btn>
+      </div>
     </template>
 
     <template v-else-if="portrait">
@@ -217,11 +232,12 @@ async function download(): Promise<void> {
         </v-btn>
         <v-spacer />
         <v-btn
-          v-if="auth.isAuthenticated"
-          to="/"
+          :to="welcomeLink"
           variant="text"
+          class="text-none"
+          append-icon="mdi-storefront-outline"
         >
-          Ir a la tienda
+          {{ isNew ? 'Empezar a comprar' : 'Ir al catálogo' }}
         </v-btn>
         <v-btn
           color="primary"
