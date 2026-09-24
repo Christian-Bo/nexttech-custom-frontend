@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useAuthService } from '~/services/authService'
 import { useInternalAuthService } from '~/services/internalAuthService'
 import { isApiError } from '~/services/api'
@@ -8,26 +8,21 @@ import { ACTOR_TYPES } from '~/types/auth'
 import { homeFor, redirectFitsActor, safeRedirect } from '~/utils/authRedirect'
 
 /**
- * Una sola pantalla de acceso. Por defecto es la del comprador; el personal entra con el enlace
- * "Acceso del personal" (o /login?tipo=interno). Cada modo usa su propio endpoint:
- * - Comprador        -> POST /api/auth/login          (usuario o correo + contraseña)
- * - Personal interno -> POST /api/internal/auth/login (correo + contraseña)
- * Nunca se intenta un endpoint y luego el otro: las identidades están separadas en el backend.
+ * Login único para compradores y personal (decisión del equipo):
+ * 1. Se intenta como comprador      -> POST /api/auth/login          (usuario o correo + contraseña)
+ * 2. Si responde 401 y se escribió un correo, se intenta como personal -> POST /api/internal/auth/login
+ * Luego se redirige según actorType/rol (homeFor). Si fallan los dos se muestra un único mensaje genérico.
  */
 definePageMeta({ layout: 'auth' })
 useHead({ title: 'Iniciar sesión | NextTech Custom' })
 
-type Mode = 'comprador' | 'interno'
-
 const route = useRoute()
-const router = useRouter()
 const auth = useAuthStore()
 const cart = useCartStore()
 const authService = useAuthService()
 const internalService = useInternalAuthService()
 const snackbar = useSnackbar()
 
-const mode = ref<Mode>(route.query.tipo === 'interno' ? 'interno' : 'comprador')
 const identifier = ref('')
 const password = ref('')
 const showPassword = ref(false)
@@ -38,21 +33,12 @@ const errorMessage = ref('')
 const changeStep = ref<{ email: string, password: string } | null>(null)
 const altMethod = ref<'qr' | 'face' | null>(null)
 
-const isInternal = computed(() => mode.value === 'interno')
-
-watch(mode, (value) => {
-  errorMessage.value = ''
-  password.value = ''
-  void router.replace({ query: { ...route.query, tipo: value === 'interno' ? 'interno' : undefined } })
-})
-
 onMounted(() => {
   if (auth.isAuthenticated && !auth.mustChangePassword) void navigateTo(homeFor(auth.actorType, auth.role))
 })
 
 const rules = {
-  required: (value: string) => !!value?.trim() || 'Este campo es obligatorio.',
-  email: (value: string) => (value.includes('@') && value.trim().length <= 150) || 'Escribe tu correo.'
+  required: (value: string) => !!value?.trim() || 'Este campo es obligatorio.'
 }
 
 /** Destino tras iniciar sesión: el redirect pendiente si corresponde a ese tipo de cuenta, o su inicio. */
@@ -89,7 +75,7 @@ async function finishInternal(result: AccessTokenResultDto): Promise<void> {
 
 function loginError(error: unknown): string {
   const status = isApiError(error) ? error.status : 0
-  if (status === 401) return isInternal.value ? 'Correo o contraseña incorrectos.' : 'Usuario o contraseña incorrectos.'
+  if (status === 401) return 'Usuario o contraseña incorrectos.'
   if (status === 403 || status === 423) return 'Tu cuenta está bloqueada o inactiva. Inténtalo más tarde o contacta a soporte.'
   if (status === 429) return 'Demasiados intentos. Espera un momento e inténtalo de nuevo.'
   return isApiError(error) ? error.message : 'No se pudo iniciar sesión.'
@@ -99,18 +85,22 @@ async function iniciarSesion(): Promise<void> {
   errorMessage.value = ''
   const id = identifier.value.trim()
   if (!id || !password.value) {
-    errorMessage.value = isInternal.value ? 'Ingresa tu correo y tu contraseña.' : 'Ingresa tu usuario y tu contraseña.'
-    return
-  }
-  if (isInternal.value && rules.email(id) !== true) {
-    errorMessage.value = 'El personal ingresa con su correo.'
+    errorMessage.value = 'Ingresa tu usuario y tu contraseña.'
     return
   }
 
   loading.value = true
   try {
-    if (isInternal.value) await finishInternal(await internalService.login({ email: id, password: password.value }))
-    else await finishBuyer(await authService.login({ identifier: id, password: password.value }))
+    try {
+      await finishBuyer(await authService.login({ identifier: id, password: password.value }))
+      return
+    }
+    catch (buyerError) {
+      // Solo un 401 con correo pasa al acceso del personal; bloqueos (403/423) o 429 se muestran tal cual.
+      const retryAsStaff = isApiError(buyerError) && buyerError.status === 401 && id.includes('@')
+      if (!retryAsStaff) throw buyerError
+    }
+    await finishInternal(await internalService.login({ email: id, password: password.value }))
   }
   catch (error) {
     errorMessage.value = loginError(error)
@@ -194,18 +184,8 @@ function cerrarRecuperacion() {
         Inicia sesión
       </h1>
       <p class="text-medium-emphasis mb-6">
-        {{ isInternal ? 'Repartidores, supervisores y administradores: ingresa con tu correo.' : 'Entra con tu usuario o el correo con el que te registraste.' }}
+        Entra con tu usuario o tu correo. Te llevamos a tu tienda o a tu panel según tu cuenta.
       </p>
-
-      <v-chip
-        v-if="isInternal"
-        color="accent"
-        variant="tonal"
-        prepend-icon="mdi-badge-account-horizontal-outline"
-        class="mb-6"
-      >
-        Acceso del personal
-      </v-chip>
 
       <v-alert
         v-if="route.query.redirect"
@@ -220,13 +200,13 @@ function cerrarRecuperacion() {
       <v-form @submit.prevent="iniciarSesion">
         <v-text-field
           v-model="identifier"
-          :label="isInternal ? 'Correo' : 'Usuario o correo'"
-          :type="isInternal ? 'email' : 'text'"
+          label="Usuario o correo"
+          type="text"
           autocomplete="username"
-          :prepend-inner-icon="isInternal ? 'mdi-email-outline' : 'mdi-account-outline'"
+          prepend-inner-icon="mdi-account-outline"
           variant="outlined"
           color="accent"
-          :rules="isInternal ? [rules.required, rules.email] : [rules.required]"
+          :rules="[rules.required]"
           :disabled="loading"
         />
 
@@ -246,7 +226,6 @@ function cerrarRecuperacion() {
 
         <div class="d-flex justify-end mb-2">
           <v-btn
-            v-if="!isInternal"
             variant="text"
             size="small"
             class="text-none"
@@ -254,12 +233,6 @@ function cerrarRecuperacion() {
           >
             Olvidé mi contraseña
           </v-btn>
-          <span
-            v-else
-            class="text-caption text-medium-emphasis"
-          >
-            ¿Olvidaste tu contraseña? Pide a un administrador que la restablezca.
-          </span>
         </div>
 
         <v-alert
@@ -285,48 +258,33 @@ function cerrarRecuperacion() {
         </v-btn>
       </v-form>
 
-      <!-- Otros accesos del comprador -->
-      <template v-if="!isInternal">
-        <div class="divider my-6">
-          <span>o ingresa con</span>
-        </div>
-        <div class="d-flex ga-3">
-          <v-btn
-            variant="outlined"
-            class="text-none flex-1-1"
-            prepend-icon="mdi-qrcode-scan"
-            @click="altMethod = 'qr'"
-          >
-            Mi QR
-          </v-btn>
-          <v-btn
-            variant="outlined"
-            class="text-none flex-1-1"
-            prepend-icon="mdi-face-recognition"
-            @click="altMethod = 'face'"
-          >
-            Mi rostro
-          </v-btn>
-        </div>
-
-        <p class="text-center mt-8">
-          ¿No tienes cuenta?
-          <NuxtLink to="/registro">Créala aquí</NuxtLink>
-        </p>
-      </template>
-
-      <!-- Cambio discreto de tipo de acceso: cada uno usa su propio endpoint -->
-      <div class="text-center mt-6">
+      <!-- Otros accesos (solo compradores) -->
+      <div class="divider my-6">
+        <span>o ingresa con</span>
+      </div>
+      <div class="d-flex ga-3">
         <v-btn
-          variant="text"
-          size="small"
-          class="text-none text-medium-emphasis"
-          :prepend-icon="isInternal ? 'mdi-arrow-left' : 'mdi-badge-account-horizontal-outline'"
-          @click="mode = isInternal ? 'comprador' : 'interno'"
+          variant="outlined"
+          class="text-none flex-1-1"
+          prepend-icon="mdi-qrcode-scan"
+          @click="altMethod = 'qr'"
         >
-          {{ isInternal ? 'Volver al acceso de compradores' : '¿Trabajas en NextTech? Acceso del personal' }}
+          Mi QR
+        </v-btn>
+        <v-btn
+          variant="outlined"
+          class="text-none flex-1-1"
+          prepend-icon="mdi-face-recognition"
+          @click="altMethod = 'face'"
+        >
+          Mi rostro
         </v-btn>
       </div>
+
+      <p class="text-center mt-8">
+        ¿No tienes cuenta?
+        <NuxtLink to="/registro">Créala aquí</NuxtLink>
+      </p>
     </template>
 
     <!-- Login con QR o rostro (solo comprador) -->
@@ -380,6 +338,9 @@ function cerrarRecuperacion() {
         >
           <p class="text-medium-emphasis mb-4">
             Escribe tu correo registrado y te enviaremos un enlace para crear una contraseña nueva.
+          </p>
+          <p class="text-caption text-medium-emphasis mb-4">
+            Si eres del personal de NextTech, pide a un administrador que restablezca tu contraseña.
           </p>
           <v-text-field
             v-model="resetEmail"

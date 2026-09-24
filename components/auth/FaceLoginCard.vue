@@ -17,9 +17,10 @@ const challenge = ref<FaceChallengeDto | null>(null)
 const busy = ref(false)
 const error = ref<string | null>(null)
 
-async function loadChallenge(): Promise<void> {
+/** keepError: al reintentar tras un fallo se conserva el mensaje para que el usuario sepa qué pasó. */
+async function loadChallenge(keepError = false): Promise<void> {
   busy.value = true
-  error.value = null
+  if (!keepError) error.value = null
   try {
     challenge.value = await authService.faceChallenge()
     step.value = 'capture'
@@ -45,10 +46,10 @@ async function submit(capture: FaceCaptureDto): Promise<void> {
     const status = isApiError(e) ? e.status : 0
     // Seguridad: nunca distinguir "usuario no existe" de "rostro no coincide".
     error.value = status === 401
-      ? 'No pudimos verificar tu identidad. Inténtalo de nuevo con buena luz.'
+      ? 'No pudimos verificar tu identidad. Revisa que ya registraste tu rostro en Mi cuenta (entrando con tu contraseña) e inténtalo con buena luz.'
       : isApiError(e) ? e.message : 'No se pudo completar el ingreso facial.'
     // Cada intento necesita un reto nuevo.
-    if (status !== 429) await loadChallenge()
+    if (status !== 429) await loadChallenge(true)
   }
   finally {
     busy.value = false
@@ -81,7 +82,7 @@ function cancel(): void {
     <form
       v-if="step === 'identifier'"
       class="d-flex flex-column ga-3"
-      @submit.prevent="loadChallenge"
+      @submit.prevent="loadChallenge()"
     >
       <v-text-field
         v-model="identifier"
@@ -109,7 +110,7 @@ function cancel(): void {
       :busy="busy"
       submit-text="Ingresar"
       @submit="submit"
-      @request-challenge="loadChallenge"
+      @request-challenge="loadChallenge()"
       @cancel="cancel"
     />
   </div>

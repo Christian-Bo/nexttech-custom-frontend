@@ -1,6 +1,19 @@
 <script setup lang="ts">
 useHead({ title: 'NextTech Custom | Productos personalizados en el campus' })
 
+const auth = useAuthStore()
+
+/** Botón principal: invita a registrarse solo a quien no ha iniciado sesión. */
+const primaryCta = computed(() => {
+  if (!auth.isAuthenticated) {
+    return { text: 'Crear mi cuenta', to: '/registro', icon: undefined }
+  }
+  if (auth.isInternal) {
+    return { text: 'Ir a mi panel', to: homeFor(auth.actorType, auth.role), icon: 'mdi-view-dashboard-outline' }
+  }
+  return { text: 'Personalizar ahora', to: '/personalizar', icon: 'mdi-palette-outline' }
+})
+
 /** Lado del producto que se muestra en la portada. */
 const side = ref<'A' | 'B'>('A')
 
@@ -51,7 +64,7 @@ const products = [
           </h1>
           <p class="hero__lead">
             Llaveros, photocards e imanes con tu foto y tu mensaje.
-            Paga con tarjeta o en efectivo y recíbelo dentro del campus.
+            Paga en efectivo al recibirlo dentro del campus.
           </p>
 
           <div class="d-flex flex-wrap ga-3 mt-8">
@@ -60,9 +73,10 @@ const products = [
               size="x-large"
               variant="flat"
               class="text-none"
-              to="/registro"
+              :to="primaryCta.to"
+              :prepend-icon="primaryCta.icon"
             >
-              Crear mi cuenta
+              {{ primaryCta.text }}
             </v-btn>
             <v-btn
               size="x-large"
