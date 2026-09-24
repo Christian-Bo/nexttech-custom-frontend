@@ -82,6 +82,8 @@ async function useBlob(blob: Blob): Promise<void> {
   finally {
     loadingPhoto.value = false
   }
+  // Con el backend real, el rostro se recorta automáticamente con POST /api/face/card/segment.
+  if (step.value === 'edit' && canSegment.value) await segmentFace(true)
 }
 
 function pickFile(): void {
@@ -97,7 +99,7 @@ async function onFile(event: Event): Promise<void> {
 
 // ---------- Recorte automático (Face API) ----------
 
-async function segmentFace(): Promise<void> {
+async function segmentFace(auto = false): Promise<void> {
   if (!originalBlob.value) return
   segmenting.value = true
   try {
@@ -110,7 +112,9 @@ async function segmentFace(): Promise<void> {
     snackbar.success('Listo, recortamos tu rostro. Elige un color de fondo.')
   }
   catch (e) {
-    snackbar.error(isApiError(e) ? e : 'No se pudo recortar la foto automáticamente.')
+    // Si el recorte automático falla, se sigue con la foto original (el recorte manual siempre funciona).
+    if (auto) snackbar.warning('No pudimos recortar tu rostro automáticamente. Puedes acomodarlo a mano o intentar de nuevo.')
+    else snackbar.error(isApiError(e) ? e : 'No se pudo recortar la foto automáticamente.')
   }
   finally {
     segmenting.value = false
@@ -373,6 +377,17 @@ onBeforeUnmount(() => {
       class="studio__editor"
     >
       <div class="studio__preview">
+        <div
+          v-if="segmenting"
+          class="studio__busy"
+          role="status"
+        >
+          <v-progress-circular
+            indeterminate
+            color="accent"
+          />
+          <span>Recortando tu rostro…</span>
+        </div>
         <canvas
           ref="canvas"
           :width="PORTRAIT_WIDTH"
@@ -451,7 +466,7 @@ onBeforeUnmount(() => {
               :loading="segmenting"
               @click="segmentFace"
             >
-              Quitar fondo
+              Recortar rostro (IA)
             </v-btn>
             <v-btn
               v-if="segmented"
@@ -622,6 +637,26 @@ onBeforeUnmount(() => {
   grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
   gap: 24px;
   align-items: start;
+}
+
+.studio__preview {
+  position: relative;
+}
+
+.studio__busy {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  aspect-ratio: 3 / 4;
+  border-radius: 12px;
+  font-weight: 600;
+  background: rgb(15 23 42 / 70%);
+  backdrop-filter: blur(2px);
 }
 
 .studio__canvas {

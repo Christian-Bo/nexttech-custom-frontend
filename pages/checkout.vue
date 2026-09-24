@@ -4,6 +4,7 @@ import type { DeliveryArea } from '~/features/catalog/types/catalog'
 import type { CheckoutResult, PaymentMethod } from '~/features/orders/types/orders'
 import { useShopCatalog } from '~/features/catalog/services/catalogService'
 import { useOrdersService } from '~/features/orders/services/ordersService'
+import { useReceiptService } from '~/features/tracking/services/receiptService'
 import { isApiError } from '~/services/api'
 import type { ApiError } from '~/types/api'
 import { formatQ } from '~/utils/format'
@@ -22,6 +23,22 @@ const cart = useCartStore()
 const snackbar = useSnackbar()
 const catalog = useShopCatalog()
 const orders = useOrdersService()
+const receipt = useReceiptService()
+const downloadingReceipt = ref(false)
+
+async function downloadReceipt(): Promise<void> {
+  if (!result.value) return
+  downloadingReceipt.value = true
+  try {
+    await receipt.download(result.value.codigoOrden)
+  }
+  catch (e) {
+    snackbar.error(isApiError(e) ? e : 'No se pudo descargar la constancia.')
+  }
+  finally {
+    downloadingReceipt.value = false
+  }
+}
 
 const REFERENCE_MAX = 200
 const AREA_ICONS: Record<string, string> = {
@@ -123,11 +140,24 @@ onMounted(load)
           variant="tonal"
           size="large"
           class="text-none"
+          prepend-icon="mdi-file-download-outline"
+          :loading="downloadingReceipt"
+          @click="downloadReceipt"
+        >
+          Constancia (PDF)
+        </v-btn>
+        <v-btn
+          variant="text"
+          size="large"
+          class="text-none"
           to="/mis-pedidos"
         >
           Mis pedidos
         </v-btn>
       </div>
+      <p class="text-caption text-medium-emphasis mt-4">
+        También te enviamos la constancia con tu QR de entrega a tu correo.
+      </p>
     </div>
 
     <template v-else>
