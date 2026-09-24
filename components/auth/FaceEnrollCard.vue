@@ -15,9 +15,10 @@ const busy = ref(false)
 const error = ref<string | null>(null)
 const result = ref<FaceEnrollResultDto | null>(null)
 
-async function loadChallenge(): Promise<void> {
+/** keepError: al reintentar tras un fallo se conserva el mensaje para que el usuario sepa qué pasó. */
+async function loadChallenge(keepError = false): Promise<void> {
   busy.value = true
-  error.value = null
+  if (!keepError) error.value = null
   try {
     challenge.value = await faceService.challenge()
     step.value = 'capture'
@@ -44,7 +45,7 @@ async function submit(capture: FaceCaptureDto): Promise<void> {
     error.value = status === 422
       ? 'No superaste la prueba de vida. Asegúrate de tener buena luz y de hacer el movimiento indicado.'
       : isApiError(e) ? e.message : 'No se pudo registrar tu rostro.'
-    if (status === 422 || status === 400) await loadChallenge()
+    if (status === 422 || status === 400) await loadChallenge(true)
   }
   finally {
     busy.value = false
@@ -84,7 +85,7 @@ async function submit(capture: FaceCaptureDto): Promise<void> {
         color="primary"
         prepend-icon="mdi-face-recognition"
         :loading="busy"
-        @click="loadChallenge"
+        @click="loadChallenge()"
       >
         Comenzar
       </v-btn>
@@ -96,7 +97,7 @@ async function submit(capture: FaceCaptureDto): Promise<void> {
       :busy="busy"
       submit-text="Registrar rostro"
       @submit="submit"
-      @request-challenge="loadChallenge"
+      @request-challenge="loadChallenge()"
       @cancel="step = 'intro'"
     />
 
