@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import type { DeliveryArea } from '~/features/catalog/types/catalog'
-import type { CheckoutResult, PaymentMethod } from '~/features/orders/types/orders'
+import type { OrderCreated, PaymentMethod } from '~/features/orders/types/orders'
+import { rememberPendingCheckout } from '~/features/orders/types/orders'
 import { useShopCatalog } from '~/features/catalog/services/catalogService'
 import { useOrdersService } from '~/features/orders/services/ordersService'
 import { useReceiptService } from '~/features/tracking/services/receiptService'
@@ -55,7 +56,8 @@ const payment = ref<PaymentMethod>('EFECTIVO')
 const loading = ref(true)
 const submitting = ref(false)
 const error = ref<ApiError | null>(null)
-const result = ref<CheckoutResult | null>(null)
+const result = ref<OrderCreated | null>(null)
+const redirecting = ref(false)
 
 const selectedArea = computed(() => areas.value.find(a => a.idAreaEntrega === areaId.value) ?? null)
 const canSubmit = computed(() =>
@@ -85,7 +87,23 @@ async function submit(): Promise<void> {
   if (!canSubmit.value || !areaId.value) return
   submitting.value = true
   try {
-    result.value = await orders.checkout({ idAreaEntrega: areaId.value, referenciaEntrega: reference.value, metodoPago: payment.value })
+    const outcome = await orders.checkout({
+      idAreaEntrega: areaId.value,
+      referenciaEntrega: reference.value,
+      metodoPago: payment.value
+    })
+
+    // Tarjeta: el backend aún no creó la orden. Salimos al proveedor de pago
+    // y /compras/exito la confirma cuando el comprador vuelve.
+    if (outcome.kind === 'tarjeta') {
+      redirecting.value = true
+      rememberPendingCheckout(outcome.checkoutId)
+      const esExterno = /^https?:\/\//i.test(outcome.checkoutUrl)
+      await navigateTo(outcome.checkoutUrl, esExterno ? { external: true } : {})
+      return
+    }
+
+    result.value = outcome
     await cart.load()
   }
   catch (e) {
@@ -283,7 +301,7 @@ onMounted(load)
                       Tarjeta de crédito o débito
                     </div>
                     <div class="text-caption text-medium-emphasis">
-                      {{ orders.paymentMethods.includes('TARJETA') ? 'Pago en línea (modo demostración).' : 'Disponible pronto.' }}
+                      Te llevamos a la pasarela de pago y volvés aquí al terminar.
                     </div>
                   </div>
                 </template>
@@ -318,15 +336,22 @@ onMounted(load)
           <v-btn
             color="primary"
             size="large"
+            variant="flat"
             block
             class="text-none mt-4"
-            prepend-icon="mdi-check"
+            :prepend-icon="payment === 'TARJETA' ? 'mdi-credit-card-outline' : 'mdi-check'"
             :disabled="!canSubmit"
-            :loading="submitting"
+            :loading="submitting || redirecting"
             @click="submit"
           >
-            Confirmar pedido
+            {{ payment === 'TARJETA' ? 'Pagar con tarjeta' : 'Confirmar pedido' }}
           </v-btn>
+          <p
+            v-if="payment === 'TARJETA' && canSubmit"
+            class="text-caption text-medium-emphasis mt-2 text-center"
+          >
+            Tu pedido se crea cuando el pago quede confirmado.
+          </p>
           <p
             v-if="!canSubmit"
             class="text-caption text-medium-emphasis mt-2 text-center"
