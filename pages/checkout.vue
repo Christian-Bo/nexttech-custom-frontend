@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import type { DeliveryArea } from '~/features/catalog/types/catalog'
-import type { CheckoutResult, PaymentMethod } from '~/features/orders/types/orders'
+import type { CheckoutResult, PaymentMethod, RecurrenteCheckoutSession } from '~/features/orders/types/orders'
+import { isRecurrenteCheckoutSession } from '~/features/orders/types/orders'
+import { savePendingCheckout, readPendingCheckout, clearPendingCheckout } from '~/features/orders/services/recurrenteSession'
 import { useShopCatalog } from '~/features/catalog/services/catalogService'
 import { useOrdersService } from '~/features/orders/services/ordersService'
 import { useReceiptService } from '~/features/tracking/services/receiptService'
@@ -19,6 +21,8 @@ definePageMeta({
 })
 useHead({ title: 'Finalizar compra · NextTech Custom' })
 
+const auth = useAuthStore()
+const useMocks = !!useRuntimeConfig().public.useMocks
 const cart = useCartStore()
 const snackbar = useSnackbar()
 const catalog = useShopCatalog()
@@ -56,10 +60,13 @@ const loading = ref(true)
 const submitting = ref(false)
 const error = ref<ApiError | null>(null)
 const result = ref<CheckoutResult | null>(null)
+const pendingCard = ref<RecurrenteCheckoutSession | null>(null)
+const confirmingCard = ref(false)
+const cardMessage = ref('')
 
 const selectedArea = computed(() => areas.value.find(a => a.idAreaEntrega === areaId.value) ?? null)
 const canSubmit = computed(() =>
-  !!areaId.value && reference.value.trim().length >= 3 && cart.items.length > 0 && orders.paymentMethods.includes(payment.value)
+  !!areaId.value && reference.value.trim().length >= 3 && cart.items.length > 0 && !pendingCard.value && orders.paymentMethods.includes(payment.value)
 )
 
 function areaIcon(nombre: string): string {
@@ -70,6 +77,12 @@ async function load(): Promise<void> {
   loading.value = true
   error.value = null
   try {
+    // Si Recurrente redirige o se recarga la página, no crear un segundo checkout.
+    const previous = readPendingCheckout(auth.buyerId)
+    if (previous && !useMocks) {
+      pendingCard.value = previous
+      payment.value = 'TARJETA'
+    }
     const [list] = await Promise.all([catalog.listDeliveryAreas(), cart.load()])
     areas.value = list
   }
@@ -81,11 +94,57 @@ async function load(): Promise<void> {
   }
 }
 
+async function confirmCard(checkoutId: string): Promise<void> {
+  const pending = pendingCard.value
+  if (!pending || confirmingCard.value) return
+  if (checkoutId !== pending.checkoutId) {
+    cardMessage.value = 'La referencia devuelta por Recurrente no coincide con la sesión iniciada.'
+    return
+  }
+  confirmingCard.value = true
+  cardMessage.value = ''
+  try {
+    // El backend comprueba el pago. Hasta aquí NO se crea la orden.
+    result.value = await orders.confirmCard(pending.checkoutId)
+    clearPendingCheckout(pending.checkoutId)
+    pendingCard.value = null
+    try { await cart.load() } catch { /* Orden ya confirmada; no revertir éxito por recarga. */ }
+  }
+  catch (e) {
+    const message = isApiError(e) ? e.message : 'No se pudo confirmar el pago. Reinténtalo antes de crear otro checkout.'
+    cardMessage.value = message
+    snackbar.error(isApiError(e) ? e : message)
+  }
+  finally {
+    confirmingCard.value = false
+  }
+}
+
+function discardPendingCard(): void {
+  if (!pendingCard.value || confirmingCard.value) return
+  if (!window.confirm('Esta acción solo descarta la sesión en esta pantalla. Si ya pagaste, NO generes otro cobro: entra a Mis pedidos o utiliza el enlace de confirmación. ¿Deseas continuar?')) return
+  clearPendingCheckout(pendingCard.value.checkoutId)
+  pendingCard.value = null
+  cardMessage.value = ''
+}
+
 async function submit(): Promise<void> {
-  if (!canSubmit.value || !areaId.value) return
+  if (!canSubmit.value || !areaId.value || submitting.value) return
   submitting.value = true
   try {
-    result.value = await orders.checkout({ idAreaEntrega: areaId.value, referenciaEntrega: reference.value, metodoPago: payment.value })
+    const response = await orders.checkout({ idAreaEntrega: areaId.value, referenciaEntrega: reference.value, metodoPago: payment.value })
+    if (isRecurrenteCheckoutSession(response)) {
+      // Guardamos checkoutId ANTES de montar el widget; si el navegador bloquea
+      // sessionStorage, conservamos la sesión en memoria y la URL de retorno.
+      if (auth.buyerId !== null) {
+        try { savePendingCheckout(auth.buyerId, response) }
+        catch { snackbar.error('No fue posible guardar temporalmente la sesión de pago en este navegador.') }
+      }
+      pendingCard.value = response
+      cardMessage.value = ''
+      return
+    }
+    result.value = response
     await cart.load()
   }
   catch (e) {
@@ -95,6 +154,7 @@ async function submit(): Promise<void> {
     submitting.value = false
   }
 }
+
 
 onMounted(load)
 </script>
@@ -158,6 +218,32 @@ onMounted(load)
       <p class="text-caption text-medium-emphasis mt-4">
         También te enviamos la constancia con tu QR de entrega a tu correo.
       </p>
+    </div>
+
+    <div v-else-if="pendingCard" class="payment-pending">
+      <v-btn variant="text" prepend-icon="mdi-arrow-left" class="text-none mb-3" @click="discardPendingCard">
+        Volver a métodos de pago
+      </v-btn>
+      <h1 class="text-h5 font-weight-bold mb-2">Completa tu pago con tarjeta</h1>
+      <p class="text-body-2 text-medium-emphasis mb-4">
+        Total {{ formatQ(pendingCard.total) }} · {{ pendingCard.moneda }}. La orden se creará únicamente al confirmar el pago.
+      </p>
+      <v-alert v-if="cardMessage" type="warning" variant="tonal" class="mb-4">{{ cardMessage }}</v-alert>
+      <v-progress-linear v-if="confirmingCard" indeterminate color="secondary" class="mb-4" />
+      <RecurrenteCheckoutWidget
+        :key="pendingCard.checkoutId"
+        :checkout-id="pendingCard.checkoutId"
+        :checkout-url="pendingCard.checkoutUrl"
+        @success="confirmCard"
+        @failure="cardMessage = $event"
+        @pending="cardMessage = 'Tu pago está en proceso. Espera la confirmación antes de volver a intentarlo.'"
+      />
+      <div class="d-flex flex-wrap ga-2 mt-4">
+        <v-btn color="secondary" variant="tonal" :loading="confirmingCard" @click="confirmCard(pendingCard.checkoutId)">
+          Verificar pago
+        </v-btn>
+        <v-btn variant="text" to="/mis-pedidos">Mis pedidos</v-btn>
+      </div>
     </div>
 
     <template v-else>
@@ -283,7 +369,7 @@ onMounted(load)
                       Tarjeta de crédito o débito
                     </div>
                     <div class="text-caption text-medium-emphasis">
-                      {{ orders.paymentMethods.includes('TARJETA') ? 'Pago en línea (modo demostración).' : 'Disponible pronto.' }}
+                      {{ useMocks ? 'Pago de demostración; no se realizará un cobro.' : orders.paymentMethods.includes('TARJETA') ? 'Pago seguro con Recurrente.' : 'Disponible pronto.' }}
                     </div>
                   </div>
                 </template>
@@ -325,7 +411,7 @@ onMounted(load)
             :loading="submitting"
             @click="submit"
           >
-            Confirmar pedido
+            {{ payment === 'TARJETA' && !useMocks ? 'Continuar a pago seguro' : 'Confirmar pedido' }}
           </v-btn>
           <p
             v-if="!canSubmit"
@@ -493,4 +579,19 @@ onMounted(load)
     position: static;
   }
 }
+
+/* Compra: sin desbordamientos en textos y acciones de móvil. */
+.layout, .summary, .area { min-inline-size: 0; }
+.summary__items li > span:first-child,
+.summary__row > span { min-inline-size: 0; overflow-wrap: anywhere; }
+.done__code { max-inline-size: 100%; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .done { padding: 24px 4px; }
+  .done__code { inline-size: 100%; padding: 16px; }
+  .done__code strong { font-size: clamp(1.15rem, 5vw, 1.8rem); overflow-wrap: anywhere; }
+  .summary { position: static; }
+}
+
+.payment-pending { max-width: 760px; margin: 0 auto; min-width: 0; }
+@media (max-width: 600px) { .payment-pending { padding: 0 2px; } }
 </style>

@@ -1,4 +1,4 @@
-import type { CheckoutResult, MyOrder, OrdersService } from '../types/orders'
+import type { CheckoutResult, MyOrder, OrdersService, RecurrenteCheckoutSession } from '../types/orders'
 import { MOCK_DELIVERY_AREAS } from '~/features/catalog/services/mockCatalog'
 import { clearMockCart, createMockCartService } from '~/features/cart/services/cartService'
 import { useMockOrders } from '~/services/mock/mockOrders'
@@ -55,6 +55,9 @@ export function createMockOrdersService(): OrdersService {
       clearMockCart()
       return { codigoOrden: codigo, total: cart.total, estado: 'ORDEN_GENERADA' }
     },
+    async confirmCard() {
+      throw badRequest('El modo de demostración no utiliza pagos reales de Recurrente.')
+    },
     async myOrders() {
       await new Promise(r => setTimeout(r, 300))
       const codes = readMyCodes()
@@ -68,15 +71,47 @@ export function createMockOrdersService(): OrdersService {
 
 interface OrdenApi { codigoOrden: string, fechaCreacion: string, total: number, estado: string }
 
+function toCheckoutResult(o: OrdenApi): CheckoutResult {
+  return { codigoOrden: o.codigoOrden, total: o.total, estado: statusFromName(o.estado) ?? 'ORDEN_GENERADA' }
+}
+
+/** Aceptamos solo la respuesta que corresponde a cada método de pago. */
+export function mapCheckoutResponse(
+  metodoPago: 'EFECTIVO' | 'TARJETA',
+  response: OrdenApi | RecurrenteCheckoutSession
+): CheckoutResult | RecurrenteCheckoutSession {
+  if (metodoPago === 'TARJETA') {
+    const session = response as RecurrenteCheckoutSession
+    const validUrl = typeof session.checkoutUrl === 'string' && /^https:\/\/app\.recurrente\.com\/checkout-session\//.test(session.checkoutUrl)
+    if (!session.checkoutId || !validUrl) {
+      throw { status: 502, code: 'INVALID_CHECKOUT', message: 'El servidor no devolvió una sesión válida para el pago con tarjeta.' } satisfies ApiError
+    }
+    return session
+  }
+  const order = response as OrdenApi
+  if (!order.codigoOrden) {
+    throw { status: 502, code: 'INVALID_ORDER', message: 'El servidor no devolvió la orden de efectivo.' } satisfies ApiError
+  }
+  return toCheckoutResult(order)
+}
+
 export function createHttpOrdersService(api: HttpClient): OrdersService {
   return {
-    paymentMethods: ['EFECTIVO'],
+    paymentMethods: ['EFECTIVO', 'TARJETA'],
     async checkout(req) {
-      const o = await api<OrdenApi>('/api/checkout', {
+      const o = await api<OrdenApi | RecurrenteCheckoutSession>('/api/checkout', {
         method: 'POST',
         body: { idAreaEntrega: req.idAreaEntrega, referenciaEntrega: req.referenciaEntrega.trim(), metodoPago: req.metodoPago }
       })
-      return { codigoOrden: o.codigoOrden, total: o.total, estado: statusFromName(o.estado) ?? 'ORDEN_GENERADA' } satisfies CheckoutResult
+      return mapCheckoutResponse(req.metodoPago, o)
+    },
+    async confirmCard(checkoutId) {
+      const o = await api<OrdenApi>('/api/payments/recurrente/confirm', {
+        method: 'POST',
+        body: { checkoutId },
+        timeout: 45_000
+      })
+      return toCheckoutResult(o)
     },
     async myOrders() {
       const list = await api<OrdenApi[]>('/api/orders/my')

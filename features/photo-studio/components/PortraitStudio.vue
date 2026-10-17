@@ -37,7 +37,7 @@ const faceService = useFaceService()
 const useMocks = !!useRuntimeConfig().public.useMocks
 
 type Step = 'source' | 'camera' | 'edit'
-const step = ref<Step>('source')
+const step = ref<Step>('camera')
 const fileInput = ref<HTMLInputElement | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
 
@@ -112,9 +112,28 @@ async function segmentFace(auto = false): Promise<void> {
     snackbar.success('Listo, recortamos tu rostro. Elige un color de fondo.')
   }
   catch (e) {
-    // Si el recorte automático falla, se sigue con la foto original (el recorte manual siempre funciona).
-    if (auto) snackbar.warning('No pudimos recortar tu rostro automáticamente. Puedes acomodarlo a mano o intentar de nuevo.')
-    else snackbar.error(isApiError(e) ? e : 'No se pudo recortar la foto automáticamente.')
+    // La fotografía original permanece disponible para edición si falla la Face API.
+    const status = isApiError(e) ? e.status : null
+    const code = isApiError(e) ? e.code : 'LOCAL_IMAGE_ERROR'
+    const traceId = isApiError(e) ? e.traceId : undefined
+    console.warn('[photo-studio] Error de segmentación', { status, code, traceId })
+
+    const detail = status === 401
+      ? 'Tu sesión expiró. Inicia sesión nuevamente para utilizar el recorte inteligente.'
+      : status === 403
+        ? 'El recorte inteligente solo está disponible para compradores autenticados.'
+        : status === 400 || status === 413 || status === 422
+          ? 'La imagen no pudo procesarse. Intenta tomar otra con el rostro de frente y buena iluminación.'
+          : status === 429
+            ? 'Se alcanzó el límite de intentos. Espera un momento antes de volver a probar.'
+            : status === 0 || status === 502 || status === 503 || status === 504
+              ? 'El servicio de recorte no está disponible o tardó demasiado. Puedes continuar editando la foto original.'
+              : e instanceof Error && !isApiError(e)
+                ? 'El navegador no pudo preparar la imagen. Intenta nuevamente con otra fotografía.'
+                : 'No se pudo completar el recorte inteligente. Puedes editar la fotografía manualmente.'
+
+    if (auto) snackbar.warning(detail)
+    else snackbar.error(detail)
   }
   finally {
     segmenting.value = false
@@ -321,10 +340,10 @@ onBeforeUnmount(() => {
           color="accent"
         />
         <div class="text-subtitle-1 font-weight-bold mt-3">
-          Tomar una foto
+          Captura automática
         </div>
         <div class="text-body-2 text-medium-emphasis">
-          Usa la cámara de tu dispositivo
+          Detectamos tu rostro y tomamos la foto por ti
         </div>
       </v-card>
       <v-card
@@ -363,10 +382,9 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- 2. Cámara -->
-    <CameraCapture
+    <AutoFaceCapture
       v-else-if="step === 'camera'"
       facing="user"
-      confirm-text="Usar esta foto"
       @capture="useBlob"
       @cancel="step = 'source'"
     />
@@ -583,7 +601,7 @@ onBeforeUnmount(() => {
           <v-btn
             variant="text"
             prepend-icon="mdi-camera-retake-outline"
-            @click="step = 'source'"
+            @click="step = 'camera'"
           >
             Cambiar foto
           </v-btn>
@@ -750,5 +768,34 @@ onBeforeUnmount(() => {
   .studio__source {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Responsive: editor compacto, sin tocar canvas, filtros ni stickers. */
+.studio,
+.studio__editor,
+.studio__panel,
+.studio__preview,
+.studio__section {
+  min-inline-size: 0;
+}
+.studio__editor { gap: clamp(12px, 2vw, 24px); }
+.studio__preview { inline-size: 100%; max-inline-size: 340px; }
+.studio__panel { overflow-wrap: break-word; }
+.studio__stickers { grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); }
+.studio__sticker { min-inline-size: 0; min-block-size: 44px; }
+@media (max-width: 900px) and (min-width: 761px) {
+  .studio__editor { grid-template-columns: minmax(0, 280px) minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+  .studio__editor { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .studio__preview { max-inline-size: min(100%, 290px); margin-inline: auto; }
+  .studio__panel { gap: 14px; }
+  .studio__option { min-block-size: 150px; padding: 20px 14px; }
+}
+@media (max-width: 480px) {
+  .studio__preview { max-inline-size: min(100%, 255px); }
+  .studio__stickers { grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 6px; }
+  .studio__source { gap: 10px; }
+  .studio__section { min-inline-size: 0; }
 }
 </style>

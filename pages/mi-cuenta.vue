@@ -3,6 +3,8 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import type { BuyerProfile, NotificationCode } from '~/features/profile/services/profileService'
 import { NOTIFICATION_OPTIONS, useProfileService } from '~/features/profile/services/profileService'
 import { loadPortrait } from '~/features/photo-studio/services/portraitStorage'
+import WelcomeResendCard from '~/components/account/WelcomeResendCard.vue'
+import CredentialReissueCard from '~/components/account/CredentialReissueCard.vue'
 import { isApiError } from '~/services/api'
 import type { ApiError } from '~/types/api'
 import type { AccessTokenResultDto } from '~/types/auth'
@@ -300,6 +302,12 @@ onBeforeUnmount(() => {
               Guardar cambios
             </v-btn>
           </v-form>
+
+          <!-- Reenvío independiente: no cambia datos, contraseña ni credencial -->
+          <template v-if="!useMocks">
+            <v-divider class="my-6" />
+            <WelcomeResendCard :initial-channel="profile.notificationPreference.code" />
+          </template>
         </section>
 
         <!-- Seguridad -->
@@ -374,6 +382,12 @@ onBeforeUnmount(() => {
           >
             El registro de rostro necesita el backend (modo demo activo).
           </v-alert>
+
+          <!-- La reemisión es opcional y nunca se ejecuta desde el editor de fotos -->
+          <template v-if="!useMocks">
+            <v-divider class="my-6" />
+            <CredentialReissueCard :initial-channel="profile.notificationPreference.code" />
+          </template>
 
           <v-btn
             variant="text"
@@ -463,5 +477,19 @@ onBeforeUnmount(() => {
   .grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Perfil y formularios adaptados a pantallas pequeñas. */
+.hero, .hero__info, .grid, .panel { min-inline-size: 0; }
+.hero__info { overflow-wrap: anywhere; }
+.hero__actions { min-inline-size: 0; }
+@media (max-width: 600px) {
+  .hero { gap: 14px; padding: 16px; margin-bottom: 16px; }
+  .hero__photo { inline-size: 80px; block-size: 106px; }
+  .hero__info { flex-basis: 100%; }
+  .hero__actions { inline-size: 100%; }
+  .hero__actions :deep(.v-btn) { flex: 1 1 190px; max-inline-size: 100%; }
+  .grid { gap: 14px; }
+  .panel { padding: 16px; }
 }
 </style>

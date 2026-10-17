@@ -1,4 +1,5 @@
 import type { HttpClient } from '~/types/api'
+import type { NotificationCode } from '~/features/profile/services/profileService'
 import { useApi } from '~/services/api'
 
 /**
@@ -8,7 +9,16 @@ import { useApi } from '~/services/api'
 export function createCredentialService(api: HttpClient) {
   return {
     issue: () =>
-      api<Blob>('/api/credential/issue', { method: 'POST', responseType: 'blob', timeout: 45_000 })
+      api<Blob>('/api/credential/issue', { method: 'POST', responseType: 'blob', timeout: 45_000 }),
+
+    /** Solicita una nueva credencial y revoca el QR anterior (nunca invocar automáticamente). */
+    reissue: (channel: NotificationCode) =>
+      api<Blob>('/api/credential/reissue', {
+        method: 'POST',
+        body: { channel },
+        responseType: 'blob',
+        timeout: 60_000
+      })
   }
 }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, shallowRef } from 'vue'
 import PortraitStudio from '~/features/photo-studio/components/PortraitStudio.vue'
 import { loadPortrait, savePortrait } from '~/features/photo-studio/services/portraitStorage'
 import type { StoredPortrait } from '~/features/photo-studio/services/portraitStorage'
@@ -9,15 +9,14 @@ import type { PortraitState } from '~/features/photo-studio/utils/portrait'
 import { downloadBlob } from '~/services/credentialService'
 import { isApiError } from '~/services/api'
 
-/**
- * Paso 2 y 3 del registro: foto (recorte, filtros, stickers) y credencial PDF con la foto modificada.
- * En modo demo se puede abrir sin sesión.
- */
+/** Credencial con fotografía editada y QR obtenido mediante el contrato actual del backend. */
 definePageMeta({
   middleware: [
     (to) => {
       if (useRuntimeConfig().public.useMocks) return
-      if (!useAuthStore().isAuthenticated) return navigateTo({ path: '/login', query: { redirect: to.fullPath } })
+      if (!useAuthStore().isBuyer) {
+        return navigateTo({ path: '/login', query: { redirect: to.fullPath } })
+      }
     }
   ]
 })
@@ -30,62 +29,88 @@ const { confirm } = useConfirm()
 const qr = useCredentialQr()
 
 const isNew = computed(() => route.query.nuevo === '1')
-/** Al terminar el registro se llega al catálogo con la bienvenida. */
 const welcomeLink = computed(() => (isNew.value ? '/catalogo?bienvenida=1' : '/catalogo'))
 const portrait = ref<StoredPortrait | null>(null)
 const step = ref<'foto' | 'credencial'>('foto')
-const downloading = ref(false)
+const creatingPersonal = ref(false)
+const personalError = ref<string | null>(null)
+/** Se conserva el PDF en memoria para volver a descargar sin rotar el QR otra vez. */
+const lastPersonalPdf = shallowRef<Blob | null>(null)
 const startedAt = Date.now()
 const seconds = ref<number | null>(null)
-
-const nickname = computed(() => auth.nickname ?? 'Comprador demo')
+const nickname = computed(() => auth.nickname ?? 'Comprador')
 const today = formatIssuedAt(new Date())
 
 onMounted(() => {
   portrait.value = loadPortrait(auth.buyerId)
-  if (portrait.value && !isNew.value) step.value = 'credencial'
+  if (portrait.value && (route.query.paso === 'credencial' || !isNew.value)) {
+    step.value = 'credencial'
+  }
 })
 
 function onSaved(value: { original: string, modified: string, state: PortraitState }): void {
   const next: StoredPortrait = { ...value, updatedAt: new Date().toISOString() }
   portrait.value = next
   if (!savePortrait(auth.buyerId, next)) {
-    snackbar.warning('Tu foto está lista, pero el navegador no permitió guardarla para después.')
+    snackbar.warning('Tu fotografía está lista, pero el navegador no pudo guardarla para más adelante.')
   }
-  if (isNew.value && seconds.value === null) seconds.value = Math.round((Date.now() - startedAt) / 1000)
+  lastPersonalPdf.value = null
+  personalError.value = null
+  if (isNew.value && seconds.value === null) {
+    seconds.value = Math.round((Date.now() - startedAt) / 1000)
+  }
   step.value = 'credencial'
-  snackbar.success('¡Foto guardada!')
+  snackbar.success('Fotografía editada y stickers guardados para tu credencial personalizada.')
 }
 
-async function download(): Promise<void> {
-  if (!portrait.value) return
-  if (qr.willRotate.value) {
-    const ok = await confirm({
-      title: '¿Generar una nueva credencial?',
-      message: 'Se creará un código QR nuevo y el anterior dejará de funcionar.',
-      confirmText: 'Generar'
-    })
-    if (!ok) return
+/**
+ * Recupera el diseño del ZIP original: 70×110 mm, azul oscuro y cian,
+ * photo.modified (stickers incluidos). El QR es uno válido obtenido del backend,
+ * NO un código inventado en el navegador. No llama a /api/credential/issue.
+ */
+async function downloadPersonal(): Promise<void> {
+  if (!portrait.value || creatingPersonal.value) return
+  if (lastPersonalPdf.value) {
+    downloadBlob(lastPersonalPdf.value, credentialFileName(nickname.value))
+    return
   }
-  downloading.value = true
+
+  const ok = await confirm({
+    title: '¿Crear tu credencial personalizada?',
+    message: qr.willRotate.value
+      ? 'Usaremos tu fotografía editada, con filtros y stickers. El backend emitirá un QR nuevo e invalidará el anterior. Este PDF se crea en el navegador y no se envía automáticamente por correo.'
+      : 'Usaremos tu fotografía editada, con filtros y stickers, y el QR de tu registro. Este PDF se crea en el navegador y no se envía automáticamente por correo.',
+    confirmText: 'Crear credencial'
+  })
+  if (!ok) return
+
+  creatingPersonal.value = true
+  personalError.value = null
   try {
-    const qrCredential = await qr.obtain(auth.buyerId)
+    const credentialValue = await qr.obtain(auth.buyerId)
+    if (!credentialValue) throw new Error('El servidor no devolvió una credencial QR válida.')
     const pdf = await buildCredentialPdf({
       nickname: nickname.value,
       buyerId: auth.buyerId,
-      qrCredential,
+      qrCredential: credentialValue,
       portrait: portrait.value.modified,
       issuedAt: new Date()
     })
+    if (!(pdf instanceof Blob) || pdf.size < 5 || await pdf.slice(0, 5).text() !== '%PDF-') {
+      throw new Error('No se pudo generar el documento PDF.')
+    }
+    lastPersonalPdf.value = pdf
     downloadBlob(pdf, credentialFileName(nickname.value))
-    snackbar.success('Credencial descargada. Guárdala en un lugar seguro.')
+    snackbar.success('Credencial personalizada descargada. Conserva este PDF en un lugar seguro.')
   }
-  catch (e) {
-    console.error('[credencial]', e)
-    snackbar.error(isApiError(e) ? e : 'No se pudo generar la credencial.')
+  catch (error) {
+    personalError.value = isApiError(error)
+      ? error.message
+      : error instanceof Error ? error.message : 'No se pudo generar la credencial personalizada.'
+    snackbar.error(personalError.value)
   }
   finally {
-    downloading.value = false
+    creatingPersonal.value = false
   }
 }
 </script>
@@ -128,7 +153,7 @@ async function download(): Promise<void> {
         Tu foto de perfil
       </h1>
       <p class="text-medium-emphasis mb-6">
-        Recorta tu rostro y dale tu estilo con filtros y stickers. Esta foto aparecerá en tu credencial.
+        Recorta tu rostro y dale tu estilo con filtros y stickers. Esta foto con filtros y stickers aparecerá en tu credencial personalizada. No necesitas registrarte de nuevo con la cámara para crearla.
       </p>
       <PortraitStudio @saved="onSaved" />
       <div
@@ -151,7 +176,7 @@ async function download(): Promise<void> {
         Tu credencial
       </h1>
       <p class="text-medium-emphasis mb-6">
-        Descárgala en PDF y muéstrala para ingresar con tu código QR.
+        Tu credencial incluye la fotografía y los stickers que elegiste.
         <span v-if="seconds !== null">Terminaste tu foto en {{ seconds }} s.</span>
       </p>
 
@@ -179,7 +204,7 @@ async function download(): Promise<void> {
           </figure>
         </div>
 
-        <!-- Vista previa de la credencial -->
+        <!-- Vista previa: el ícono QR es ilustrativo; el PDF descargado incluye el QR real. -->
         <div
           class="tarjeta"
           aria-label="Vista previa de la credencial"
@@ -213,14 +238,16 @@ async function download(): Promise<void> {
       </div>
 
       <v-alert
-        v-if="qr.willRotate.value"
+        v-if="qr.willRotate.value && !lastPersonalPdf"
         type="info"
         variant="tonal"
         density="compact"
         class="mt-6"
       >
-        Al descargar se genera un QR nuevo y el anterior deja de funcionar.
+        Al crear una credencial personalizada nueva, el servidor renueva el QR y el anterior deja de funcionar.
       </v-alert>
+
+      <v-alert v-if="personalError" type="error" variant="tonal" class="mt-4">{{ personalError }}</v-alert>
 
       <div class="d-flex flex-wrap ga-3 mt-6">
         <v-btn
@@ -243,15 +270,16 @@ async function download(): Promise<void> {
           color="primary"
           size="large"
           prepend-icon="mdi-file-download-outline"
-          :loading="downloading"
-          @click="download"
+          :loading="creatingPersonal"
+          @click="downloadPersonal"
         >
-          Descargar credencial (PDF)
+          {{ lastPersonalPdf ? 'Volver a descargar mi credencial' : 'Descargar mi credencial (PDF)' }}
         </v-btn>
       </div>
     </template>
   </v-container>
 </template>
+
 
 <style scoped>
 .pasos {
@@ -413,5 +441,34 @@ async function download(): Promise<void> {
     margin: 0 auto;
     width: 100%;
   }
+}
+
+/* Responsive: pasos, fotografías y vista previa sin desbordamientos. */
+.pasos { row-gap: 10px; }
+.pasos__item { min-inline-size: 0; }
+.credencial { min-inline-size: 0; gap: clamp(14px, 3vw, 32px); }
+.credencial__fotos {
+  min-inline-size: 0;
+  flex-wrap: wrap;
+}
+.credencial__fotos figure {
+  min-inline-size: 0;
+  flex: 0 1 180px;
+}
+.credencial__fotos img { max-inline-size: 180px; margin-inline: auto; }
+.tarjeta { inline-size: 100%; max-inline-size: 260px; margin-inline: auto; }
+.tarjeta__nombre { overflow-wrap: anywhere; padding-inline: 8px; }
+@media (max-width: 760px) {
+  .credencial { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+  .credencial__fotos { inline-size: 100%; }
+}
+@media (max-width: 480px) {
+  .pasos { gap: 6px; margin-bottom: 18px; }
+  .pasos__item { gap: 6px; padding: 5px 9px 5px 5px; font-size: 0.76rem; }
+  .pasos__num { inline-size: 22px; block-size: 22px; }
+  .credencial__fotos { flex-wrap: nowrap; gap: 8px; }
+  .credencial__fotos figure { flex: 1 1 0; }
+  .credencial__fotos img { max-inline-size: 100%; }
+  .tarjeta { max-inline-size: 250px; }
 }
 </style>

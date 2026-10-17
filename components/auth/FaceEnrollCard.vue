@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onBeforeUnmount, ref } from 'vue'
 import { isApiError } from '~/services/api'
 import { useFaceService } from '~/services/faceService'
 import type { FaceCaptureDto, FaceChallengeDto, FaceEnrollResultDto } from '~/types/auth'
 
 /** Registro (enrolamiento) del rostro del comprador autenticado. */
 const emit = defineEmits<{ enrolled: [result: FaceEnrollResultDto] }>()
+const props = withDefaults(defineProps<{ showCredentialLink?: boolean }>(), { showCredentialLink: true })
 
 const faceService = useFaceService()
 
@@ -14,6 +15,34 @@ const challenge = ref<FaceChallengeDto | null>(null)
 const busy = ref(false)
 const error = ref<string | null>(null)
 const result = ref<FaceEnrollResultDto | null>(null)
+const segmentedPreview = ref<string | null>(null)
+const segmenting = ref(false)
+const segmentWarning = ref<string | null>(null)
+
+let active = true
+onBeforeUnmount(() => {
+  active = false
+  if (segmentedPreview.value) URL.revokeObjectURL(segmentedPreview.value)
+})
+
+/** Vista previa únicamente: las fotos originales siguen intactas para liveness. */
+async function previewSegmentation(original: Blob): Promise<void> {
+  segmenting.value = true
+  segmentWarning.value = null
+  try {
+    const image = await faceService.segmentCard(original)
+    if (!image.type.startsWith('image/') || image.size === 0) throw new Error('Imagen segmentada inválida')
+    if (!active) return
+    if (segmentedPreview.value) URL.revokeObjectURL(segmentedPreview.value)
+    segmentedPreview.value = URL.createObjectURL(image)
+  }
+  catch {
+    segmentWarning.value = 'Se registró tu rostro, pero no se pudo obtener la vista previa sin fondo.'
+  }
+  finally {
+    segmenting.value = false
+  }
+}
 
 /** keepError: al reintentar tras un fallo se conserva el mensaje para que el usuario sepa qué pasó. */
 async function loadChallenge(keepError = false): Promise<void> {
@@ -32,7 +61,7 @@ async function loadChallenge(keepError = false): Promise<void> {
 }
 
 async function submit(capture: FaceCaptureDto): Promise<void> {
-  if (!challenge.value) return
+  if (!challenge.value || busy.value) return
   busy.value = true
   error.value = null
   try {
@@ -50,6 +79,11 @@ async function submit(capture: FaceCaptureDto): Promise<void> {
   finally {
     busy.value = false
   }
+  // Se consulta el endpoint de segmentación tras enrolar, sin retrasar el reto de vida.
+  // La API de credenciales genera su PDF con el retrato persistido en Oracle,
+  // NO con esta vista previa. Si se desea modificar el PDF, el backend debe guardar
+  // también la fotografía segmentada.
+  if (step.value === 'done') await previewSegmentation(capture.neutralImage)
 }
 </script>
 
@@ -78,8 +112,8 @@ async function submit(capture: FaceCaptureDto): Promise<void> {
       </p>
       <ul class="text-body-2 text-medium-emphasis pl-5">
         <li>Busca un lugar con buena luz y quítate lentes oscuros o gorra.</li>
-        <li>Te pediremos una foto de frente y otra haciendo un movimiento.</li>
-        <li>Guardamos tu foto; los datos biométricos no se almacenan.</li>
+        <li>La cámara tomará las fotos automáticamente: una de frente y otra haciendo un movimiento.</li>
+        <li>El servidor conserva las fotografías necesarias para la verificación facial.</li>
       </ul>
       <v-btn
         color="primary"
@@ -101,11 +135,40 @@ async function submit(capture: FaceCaptureDto): Promise<void> {
       @cancel="step = 'intro'"
     />
 
-    <StateEmpty
-      v-else
-      icon="mdi-check-decagram"
-      title="¡Rostro registrado!"
-      :description="result?.message || 'Ya puedes ingresar con tu rostro y descargar tu credencial.'"
-    />
+    <div v-else class="d-flex flex-column ga-3">
+      <StateEmpty
+        icon="mdi-check-decagram"
+        title="¡Rostro registrado!"
+        :description="result?.message || 'Ya puedes ingresar con tu rostro y descargar tu credencial.'"
+      />
+      <div v-if="segmenting" class="d-flex align-center ga-2 text-body-2 text-medium-emphasis">
+        <v-progress-circular indeterminate size="18" width="2" color="primary" />
+        Preparando vista previa sin fondo…
+      </div>
+      <v-alert v-if="segmentWarning" type="warning" variant="tonal" density="compact">
+        {{ segmentWarning }}
+      </v-alert>
+      <v-btn
+        v-if="props.showCredentialLink"
+        to="/mi-foto?paso=credencial"
+        color="primary"
+        prepend-icon="mdi-card-account-details-outline"
+        class="text-none"
+      >
+        Continuar a mi credencial oficial
+      </v-btn>
+      <div v-if="segmentedPreview" class="d-flex flex-column align-center ga-2">
+        <v-img
+          :src="segmentedPreview"
+          alt="Vista previa del rostro segmentado"
+          width="220"
+          max-width="100%"
+          class="rounded-lg"
+        />
+        <p class="text-caption text-medium-emphasis text-center">
+          Vista previa del recorte de rostro. La credencial oficial utiliza el retrato almacenado por el servidor.
+        </p>
+      </div>
+    </div>
   </div>
 </template>

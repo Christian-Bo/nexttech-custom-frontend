@@ -9,9 +9,6 @@ const auth = useAuthStore()
 const authService = useAuthService()
 const snackbar = useSnackbar()
 
-/** Credencial QR devuelta por el backend al registrarse. */
-const credencial = useState<string | null>('nt-registro-credencial', () => null)
-
 const form = reactive({
   email: '',
   phone: '',
@@ -88,9 +85,8 @@ async function crearCuenta() {
 
     // El registro deja la sesión iniciada.
     auth.setSession(result.token)
-    credencial.value = result.qrCredential
-
-    snackbar.success('Tu cuenta fue creada. Te enviamos tu credencial.')
+    // qrCredential puede venir en la respuesta por compatibilidad: no se muestra ni se conserva.
+    snackbar.success('Cuenta creada. La bienvenida se enviará por tus canales habilitados.')
     await navigateTo('/mi-foto?nuevo=1')
   }
   catch (error) {

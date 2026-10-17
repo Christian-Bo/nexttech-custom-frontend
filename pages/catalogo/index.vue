@@ -72,8 +72,8 @@ onMounted(load)
             ¡Bienvenido a NextTech Custom{{ auth.nickname ? `, ${auth.nickname}` : '' }}!
           </h2>
           <p class="text-medium-emphasis mt-1">
-            Tu cuenta está lista. Te enviamos un correo de bienvenida con tu credencial.
-            Elige tu primer producto, diséñalo por los dos lados y recíbelo en el campus.
+            Tu cuenta está lista. Recibirás tu mensaje de bienvenida por los canales que elegiste.
+            La credencial PDF oficial se obtiene después de registrar tu rostro. ¡Descubre nuestros productos!
           </p>
           <div class="d-flex flex-wrap ga-2 mt-4">
             <v-btn
@@ -88,7 +88,7 @@ onMounted(load)
               variant="tonal"
               class="text-none"
               prepend-icon="mdi-card-account-details-outline"
-              to="/mi-foto"
+              to="/mi-foto?paso=credencial"
             >
               Mi credencial
             </v-btn>
