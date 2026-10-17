@@ -30,6 +30,7 @@ const templates = ref<ProductTemplate[]>(useMocks ? PRODUCT_TEMPLATES : [])
 const loading = ref(!useMocks)
 const error = ref<ApiError | null>(null)
 const saving = ref(false)
+const initialNfcUrl = ref('')
 const saved = ref<{ name: string, price?: number } | null>(null)
 
 const code = computed({
@@ -60,7 +61,7 @@ async function loadCatalog(): Promise<void> {
 
 const personalizationService = useMocks ? null : usePersonalizationService()
 
-async function onComplete(output: DesignExport): Promise<void> {
+async function onComplete(output: DesignExport, nfcUrl: string): Promise<void> {
   if (!template.value) return
   // Modo demo: el diseño se agrega al carrito de demostración.
   if (!personalizationService) {
@@ -89,7 +90,7 @@ async function onComplete(output: DesignExport): Promise<void> {
   }
   saving.value = true
   try {
-    const id = await personalizationService.save(template.value, output)
+    const id = await personalizationService.save(template.value, output, nfcUrl)
     await personalizationService.addToCart(template.value.idVariante!, id)
     await saveDesignPreview(id, output.images.A)
     await cart.load()
@@ -104,8 +105,16 @@ async function onComplete(output: DesignExport): Promise<void> {
 }
 
 
-onMounted(() => {
-  if (!useMocks) void loadCatalog()
+onMounted(async () => {
+  if (!useMocks) await loadCatalog()
+  const id = Number(route.query.personalizacion)
+  if (personalizationService && Number.isSafeInteger(id) && id > 0 && auth.isBuyer) {
+    try {
+      const previous = await personalizationService.get(id)
+      if (previous.idVariante === template.value?.idVariante) initialNfcUrl.value = previous.nfcUrl ?? ''
+    }
+    catch { /* crear nuevo diseño seguirá disponible */ }
+  }
 })
 </script>
 
@@ -165,6 +174,7 @@ onMounted(() => {
         :template="template"
         :saving="saving"
         :finish-text="'Agregar al carrito'"
+        :initial-nfc-url="initialNfcUrl"
         @complete="onComplete"
       />
       <template #fallback>

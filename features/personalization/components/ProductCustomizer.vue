@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { DesignExport, ProductTemplate, SideKey } from '../types/editor'
 import { MAX_STICKERS_PER_SIDE } from '../types/editor'
 import { useProductEditor } from '../composables/useProductEditor'
 import { EDITOR_COLORS, STICKERS } from '../config/products'
 import EditorContextPanel from './EditorContextPanel.vue'
 import { ImageValidationError } from '~/utils/image'
+import { validateNfcCustomerUrl } from '../services/nfcValidation'
 
 /**
  * Editor de personalización (client-only: usar dentro de <ClientOnly>).
@@ -17,8 +18,12 @@ const props = defineProps<{
   saving?: boolean
   /** Texto del botón final. */
   finishText?: string
+  initialNfcUrl?: string
 }>()
-const emit = defineEmits<{ complete: [result: DesignExport] }>()
+const emit = defineEmits<{ complete: [result: DesignExport, nfcUrl: string] }>()
+const nfcUrl = ref(props.initialNfcUrl ?? '')
+const nfcError = ref('')
+watch(() => props.initialNfcUrl, (value) => { if (value) nfcUrl.value = value })
 
 const editor = useProductEditor(props.template)
 const snackbar = useSnackbar()
@@ -109,6 +114,14 @@ async function openPreview(): Promise<void> {
 }
 
 async function finish(): Promise<void> {
+  const url = nfcUrl.value.trim()
+  const urlError = validateNfcCustomerUrl(url)
+  if (urlError) {
+    nfcError.value = urlError
+    snackbar.warning(urlError)
+    return
+  }
+  nfcError.value = ''
   const missing = editor.missingRequiredSides()
   if (missing.length > 0) {
     const names = missing.map(k => props.template.zones.find(z => z.key === k)?.name).join(' y ')
@@ -119,7 +132,7 @@ async function finish(): Promise<void> {
   finishing.value = true
   try {
     const result = await editor.exportDesign()
-    emit('complete', result)
+    emit('complete', result, url)
   }
   catch {
     snackbar.error('No se pudo generar el diseño final.')
@@ -206,6 +219,22 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="customizer">
+    <v-card variant="tonal" color="primary" class="pa-4 mb-4" rounded="lg">
+      <div class="text-subtitle-1 font-weight-bold mb-2">¿Qué se abre al tocar tu llavero?</div>
+      <v-text-field
+        v-model="nfcUrl"
+        label="Enlace NFC"
+        placeholder="https://open.spotify.com/... o el enlace de YouTube/Facebook"
+        hint="Pega el enlace https de tu playlist, video o perfil. Al tocar el llavero se abrirá eso."
+        persistent-hint
+        :counter="2048"
+        :error-messages="nfcError ? [nfcError] : []"
+        variant="outlined"
+        bg-color="surface"
+        class="mt-2"
+        @update:model-value="nfcError = ''"
+      />
+    </v-card>
     <!-- Encabezado -->
     <header class="customizer__header">
       <div>

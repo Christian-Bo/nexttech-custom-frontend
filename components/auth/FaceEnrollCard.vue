@@ -65,7 +65,7 @@ async function submit(capture: FaceCaptureDto): Promise<void> {
   busy.value = true
   error.value = null
   try {
-    result.value = await faceService.enroll(challenge.value.id, capture)
+    result.value = await faceService.completeOnboarding(challenge.value.id, capture)
     step.value = 'done'
     emit('enrolled', result.value)
   }
@@ -150,12 +150,12 @@ async function submit(capture: FaceCaptureDto): Promise<void> {
       </v-alert>
       <v-btn
         v-if="props.showCredentialLink"
-        to="/mi-foto?paso=credencial"
+        to="/mi-credencial"
         color="primary"
         prepend-icon="mdi-card-account-details-outline"
         class="text-none"
       >
-        Continuar a mi credencial oficial
+        Personalizar mi credencial oficial
       </v-btn>
       <div v-if="segmentedPreview" class="d-flex flex-column align-center ga-2">
         <v-img

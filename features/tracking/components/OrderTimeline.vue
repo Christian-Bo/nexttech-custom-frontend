@@ -1,20 +1,22 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { OrderStatus } from '~/types/domain'
-import type { TrackingStepDto } from '../types/tracking'
+import type { TrackingStepDto, TrackingProgressStep } from '../types/tracking'
 import { formatDateTime } from '~/utils/format'
 
 /**
  * Línea de tiempo del pedido.
- * audience 'buyer': termina en "Listo para entrega" (enunciado 3.j: es la última etapa del tracking).
- * audience 'staff': flujo operativo completo (en entrega + resultado).
+ * Buyer: presenta exactamente los pasos[] entregados por backend, incluidos En entrega y Entregado.
+ * En modo demo se conservan los pasos históricos de la interfaz original.
  */
 const props = withDefaults(defineProps<{
   estado: OrderStatus
   historial: TrackingStepDto[]
+  pasos?: TrackingProgressStep[]
   audience?: 'buyer' | 'staff'
 }>(), {
-  audience: 'buyer'
+  audience: 'buyer',
+  pasos: () => []
 })
 
 const STEP_META: Record<OrderStatus, { label: string, icon: string, hint: string }> = {
@@ -27,6 +29,9 @@ const STEP_META: Record<OrderStatus, { label: string, icon: string, hint: string
 }
 
 const steps = computed<OrderStatus[]>(() => {
+  if (props.audience === 'buyer' && props.pasos?.length) {
+    return [...props.pasos].sort((a, b) => a.orden - b.orden).map(s => s.codigo as OrderStatus)
+  }
   const base: OrderStatus[] = ['ORDEN_GENERADA', 'EN_ELABORACION', 'LISTO_PARA_ENTREGA']
   if (props.audience === 'buyer') return base
   const final: OrderStatus = props.estado === 'COMPRADOR_NO_ENCONTRADO' ? 'COMPRADOR_NO_ENCONTRADO' : 'ENTREGADO'
@@ -37,6 +42,11 @@ const ORDER: OrderStatus[] = ['ORDEN_GENERADA', 'EN_ELABORACION', 'LISTO_PARA_EN
 
 /** Índice del paso actual dentro de los pasos visibles. */
 const currentIndex = computed(() => {
+  if (props.audience === 'buyer' && props.pasos?.length) {
+    const selected = [...props.pasos].sort((a, b) => a.orden - b.orden)
+    const current = selected.findIndex(s => s.actual)
+    return current >= 0 ? current : selected.filter(s => s.completado).length
+  }
   const rank = ORDER.indexOf(props.estado)
   // Comprador: pasada la última etapa visible, todas quedan completadas.
   const lastVisible = ORDER.indexOf(steps.value[steps.value.length - 1]!)
@@ -53,6 +63,15 @@ function whenOf(state: OrderStatus): string | null {
   return h ? formatDateTime(h.fechaHora) : null
 }
 
+function stepFor(code: OrderStatus): TrackingProgressStep | undefined {
+  return props.pasos?.find(step => step.codigo === code)
+}
+function isCompleted(code: OrderStatus, index: number): boolean {
+  return stepFor(code)?.completado ?? index < currentIndex.value
+}
+function isCurrent(code: OrderStatus, index: number): boolean {
+  return stepFor(code)?.actual ?? index === currentIndex.value
+}
 const isFailed = computed(() => props.estado === 'COMPRADOR_NO_ENCONTRADO')
 </script>
 
@@ -66,23 +85,23 @@ const isFailed = computed(() => props.estado === 'COMPRADOR_NO_ENCONTRADO')
       :key="s"
       class="step"
       :class="{
-        'step--done': i < currentIndex,
-        'step--current': i === currentIndex,
-        'step--failed': isFailed && i === currentIndex
+        'step--done': isCompleted(s, i),
+        'step--current': isCurrent(s, i),
+        'step--failed': isFailed && isCurrent(s, i)
       }"
-      :aria-current="i === currentIndex ? 'step' : undefined"
+      :aria-current="isCurrent(s, i) ? 'step' : undefined"
     >
       <div
         class="step__marker"
-        :class="i === currentIndex ? `anim-${s.toLowerCase()}` : undefined"
+        :class="isCurrent(s, i) ? `anim-${s.toLowerCase()}` : undefined"
       >
         <v-icon
-          :icon="STEP_META[s].icon"
+          :icon="STEP_META[s]?.icon ?? 'mdi-check-circle-outline'"
           size="20"
           class="step__icon"
         />
         <span
-          v-if="i < currentIndex"
+          v-if="isCompleted(s, i)"
           class="step__badge"
           aria-hidden="true"
         >
@@ -94,27 +113,27 @@ const isFailed = computed(() => props.estado === 'COMPRADOR_NO_ENCONTRADO')
       </div>
       <div class="step__body">
         <div class="d-flex align-center ga-2 flex-wrap">
-          <span class="step__label">{{ STEP_META[s].label }}</span>
+          <span class="step__label">{{ pasos?.find(p => p.codigo === s)?.nombre ?? STEP_META[s]?.label ?? s }}</span>
           <span
             class="step__state"
-            :class="i < currentIndex ? 'step__state--done' : i === currentIndex ? (isFailed ? 'step__state--failed' : 'step__state--current') : 'step__state--pending'"
+            :class="isCompleted(s, i) ? 'step__state--done' : isCurrent(s, i) ? (isFailed ? 'step__state--failed' : 'step__state--current') : 'step__state--pending'"
           >
-            {{ i < currentIndex ? 'Completado' : i === currentIndex ? (isFailed ? 'Con problema' : 'En curso') : 'Pendiente' }}
+            {{ isCompleted(s, i) ? 'Completado' : isCurrent(s, i) ? (isFailed ? 'Con problema' : 'En curso') : 'Pendiente' }}
           </span>
         </div>
         <div
-          v-if="i <= currentIndex && whenOf(s)"
+          v-if="(isCompleted(s, i) || isCurrent(s, i)) && whenOf(s)"
           class="step__time"
         >
           {{ whenOf(s) }}
         </div>
         <Transition name="hint">
           <p
-            v-if="i === currentIndex"
+            v-if="isCurrent(s, i)"
             :key="s"
             class="step__hint"
           >
-            {{ STEP_META[s].hint }}
+            {{ STEP_META[s]?.hint ?? 'Consulta el historial para más información.' }}
           </p>
         </Transition>
       </div>

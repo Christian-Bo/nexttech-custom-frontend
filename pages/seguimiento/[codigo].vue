@@ -6,7 +6,7 @@ definePageMeta({
   middleware: [
     (to) => {
       if (useRuntimeConfig().public.useMocks) return
-      if (!useAuthStore().isAuthenticated) return navigateTo({ path: '/login', query: { redirect: to.fullPath } })
+      if (!useAuthStore().isBuyer) return navigateTo({ path: '/login', query: { redirect: to.fullPath } })
     }
   ]
 })

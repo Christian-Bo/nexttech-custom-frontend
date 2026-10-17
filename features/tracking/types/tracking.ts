@@ -2,12 +2,22 @@
 import type { OrderStatus } from '~/types/domain'
 
 export interface TrackingStepDto {
-  estado: OrderStatus
+  estado: string
   fechaHora: string
   observacion?: string | null
 }
 
+export interface TrackingProgressStep {
+  orden: number
+  codigo: string
+  nombre: string
+  completado: boolean
+  actual: boolean
+}
+
 export interface OrderTrackingDto {
+  /** Los pasos exactos del backend, sin inferir el avance mediante GPS. */
+  pasos?: TrackingProgressStep[]
   idOrden: number
   codigoOrden: string
   estado: OrderStatus

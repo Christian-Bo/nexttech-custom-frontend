@@ -45,6 +45,10 @@ export function createFaceService(api: HttpClient) {
     enroll: (challengeId: string, capture: FaceCaptureDto) =>
       api<FaceEnrollResultDto>('/api/face/enroll', { method: 'POST', body: captureForm(challengeId, capture), timeout: 45_000 }),
 
+    /** Nuevo onboarding V4: 2 capturas y liveness durante una misma sesión. */
+    completeOnboarding: (challengeId: string, capture: FaceCaptureDto) =>
+      api<FaceEnrollResultDto>('/api/onboarding/complete', { method: 'POST', body: captureForm(challengeId, capture), timeout: 60_000 }),
+
     /** 200 no implica aprobado: usar isFaceVerificationApproved(). 409 = sin enrolamiento. */
     verify: (challengeId: string, capture: FaceCaptureDto) =>
       api<FaceVerifyResultDto>('/api/face/verify', { method: 'POST', body: captureForm(challengeId, capture), timeout: 45_000 }),

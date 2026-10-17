@@ -7,6 +7,7 @@ export interface ProductionOrderDto {
   total: number
   estado: OrderStatus
   areaEntrega: string
+  nicknameComprador?: string
 }
 
 /** Lado de un artículo listo para imprimir (ZonaProduccionDto). */
@@ -25,6 +26,8 @@ export interface ProductionItem {
   cantidad: number
   atributosJson: string
   idPersonalizacion: number | null
+  nfcUrl?: string | null
+  nfcWriteUrl?: string | null
   zonas: ProductionZone[]
 }
 
@@ -37,6 +40,8 @@ export interface ProductionDetail {
   areaEntrega: string
   referenciaEntrega: string
   nicknameComprador: string
+  nfcUrl?: string | null
+  nfcWriteUrl?: string | null
   idArchivoConstancia: number | null
   items: ProductionItem[]
 }
@@ -49,4 +54,8 @@ export interface ProductionService {
   getDetail: (codigo: string) => Promise<ProductionDetail>
   /** Descarga el archivo final de un lado (o la constancia) para imprimir. */
   downloadFile: (codigo: string, idArchivo: number) => Promise<Blob>
+  /** PDF real A4 (lado A/B), elaborado en backend. */
+  printSelected: (codigos: string[]) => Promise<Blob>
+  printQueue: () => Promise<Blob>
+  reprint: (codigo: string) => Promise<Blob>
 }

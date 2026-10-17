@@ -4,10 +4,11 @@ import { useAuthService } from '~/services/authService'
 import { isApiError } from '~/services/api'
 
 /**
- * Restablecer contraseña con el enlace del correo: /restablecer-contrasena?token=...
+ * Restablecer contraseña desde /restablecer-contrasena o /reset-password?token=...
  * (el backend arma el enlace con RecoveryUrlBase). El token es de un solo uso y vence en 30 min.
  */
-definePageMeta({ layout: 'auth' })
+// La API envía /reset-password; conservar también la ruta original en español.
+definePageMeta({ layout: 'auth', alias: ['/reset-password'] })
 useHead({ title: 'Nueva contraseña | NextTech Custom' })
 
 const route = useRoute()

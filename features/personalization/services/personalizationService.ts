@@ -1,5 +1,6 @@
 import type { DesignExport, ProductTemplate, SideKey } from '../types/editor'
 import { useApi } from '~/services/api'
+import { validateNfcCustomerUrl } from './nfcValidation'
 
 /**
  * Guarda la personalización (POST /api/personalizations) y la agrega al carrito (POST /api/cart/items).
@@ -47,13 +48,17 @@ function summarize(objects: FabricObjectJson[]) {
 
 export interface SavedPersonalization {
   idPersonalizacion: number
+  idVariante?: number
   idDetalleCarrito?: number
+  nfcUrl?: string
 }
 
 export function usePersonalizationService() {
   const api = useApi()
 
-  async function save(template: ProductTemplate, result: DesignExport): Promise<number> {
+  async function save(template: ProductTemplate, result: DesignExport, nfcUrl: string): Promise<number> {
+    const nfcError = validateNfcCustomerUrl(nfcUrl)
+    if (nfcError) throw { status: 400, code: 'BAD_NFC_URL', message: nfcError }
     if (!template.idVariante || !template.zoneIds) throw { status: 400, code: 'NO_VARIANT', message: 'Este producto no está disponible en el catálogo.' }
     const zonas = []
     for (const [key, idZona] of Object.entries(template.zoneIds) as [SideKey, number][]) {
@@ -72,7 +77,7 @@ export function usePersonalizationService() {
     }
     const created = await api<{ idPersonalizacion: number }>('/api/personalizations', {
       method: 'POST',
-      body: { idVariante: template.idVariante, zonas },
+      body: { idVariante: template.idVariante, nfcUrl: nfcUrl.trim(), zonas },
       timeout: 60_000
     })
     return created.idPersonalizacion
@@ -82,5 +87,8 @@ export function usePersonalizationService() {
     await api('/api/cart/items', { method: 'POST', body: { idVariante, cantidad, idPersonalizacion } })
   }
 
-  return { save, addToCart }
+  async function get(id: number): Promise<SavedPersonalization> {
+    return api<SavedPersonalization>(`/api/personalizations/${id}`)
+  }
+  return { save, addToCart, get }
 }

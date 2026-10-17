@@ -4,7 +4,6 @@ import type { BuyerProfile, NotificationCode } from '~/features/profile/services
 import { NOTIFICATION_OPTIONS, useProfileService } from '~/features/profile/services/profileService'
 import { loadPortrait } from '~/features/photo-studio/services/portraitStorage'
 import WelcomeResendCard from '~/components/account/WelcomeResendCard.vue'
-import CredentialReissueCard from '~/components/account/CredentialReissueCard.vue'
 import { isApiError } from '~/services/api'
 import type { ApiError } from '~/types/api'
 import type { AccessTokenResultDto } from '~/types/auth'
@@ -167,6 +166,12 @@ onBeforeUnmount(() => {
     class="py-8"
     style="max-width: 1000px"
   >
+    <v-alert v-if="!useMocks" type="info" variant="tonal" class="mb-4">
+      <div class="d-flex flex-wrap align-center ga-2">
+        <span>Consulta y personaliza la presentación de tu credencial. Tu fotografía y código QR siguen bajo control de NextTech.</span>
+        <v-btn to="/mi-credencial" variant="tonal" color="primary" prepend-icon="mdi-card-account-details-outline">Ver mi credencial</v-btn>
+      </div>
+    </v-alert>
     <v-skeleton-loader
       v-if="loading"
       type="card-avatar, article"
@@ -382,12 +387,6 @@ onBeforeUnmount(() => {
           >
             El registro de rostro necesita el backend (modo demo activo).
           </v-alert>
-
-          <!-- La reemisión es opcional y nunca se ejecuta desde el editor de fotos -->
-          <template v-if="!useMocks">
-            <v-divider class="my-6" />
-            <CredentialReissueCard :initial-channel="profile.notificationPreference.code" />
-          </template>
 
           <v-btn
             variant="text"

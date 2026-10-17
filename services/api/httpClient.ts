@@ -1,18 +1,42 @@
 import type { HttpClient, HttpRequestOptions } from '~/types/api'
 import { normalizeApiError } from './errors'
 
-/** Si una respuesta 'blob' falló, el ProblemDetails llega como Blob: lo convierte a JSON. */
+/**
+ * Cuando se solicita un PDF (responseType: blob), un error HTTP puede devolver
+ * ProblemDetails en un Blob. Los FetchError de ofetch tienen `data` de solo
+ * lectura, así que copiamos los campos en vez de modificar el error original.
+ */
 async function readBlobError(error: unknown): Promise<unknown> {
-  const e = error as { data?: unknown }
-  if (typeof Blob !== 'undefined' && e?.data instanceof Blob) {
-    try {
-      e.data = JSON.parse(await e.data.text())
-    }
-    catch {
-      e.data = undefined
-    }
+  if (typeof Blob === 'undefined' || !error || typeof error !== 'object') return error
+
+  const e = error as {
+    name?: string
+    message?: string
+    status?: number
+    statusCode?: number
+    cause?: unknown
+    data?: unknown
   }
-  return error
+  if (!(e.data instanceof Blob)) return error
+
+  let data: unknown
+  try {
+    data = JSON.parse(await e.data.text())
+  }
+  catch {
+    data = undefined
+  }
+
+  // Los getters de FetchError (status/statusCode/data) no siempre son
+  // enumerables; un spread por sí solo perdería el código HTTP original.
+  return {
+    name: e.name,
+    message: e.message,
+    status: e.status,
+    statusCode: e.statusCode,
+    cause: e.cause,
+    data
+  }
 }
 
 export interface HttpClientDeps {

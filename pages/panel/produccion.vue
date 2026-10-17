@@ -25,13 +25,108 @@ const detail = ref<ProductionDetail | null>(null)
 const detailOpen = ref(false)
 const detailLoading = ref(false)
 const downloadingFile = ref<number | null>(null)
+const selected = ref<string[]>([])
+const printing = ref(false)
+const writingNfc = ref(false)
+const nfcMessage = ref('')
+const selectedNfcItemIndex = ref(0)
+const { confirm } = useConfirm()
+
+/** Web NFC solo existe en navegadores Android compatibles y en contexto seguro. */
+interface NdefWriter { write: (message: { records: { recordType: string, data: string }[] }) => Promise<void> }
+type NdefConstructor = new () => NdefWriter
+const nfcSupported = ref(false)
+const nfcItems = computed(() => (detail.value?.items ?? [])
+  .map((item, i) => ({ title: `${i + 1}. ${item.nombreProducto}${item.nombreVariante ? ` · ${item.nombreVariante}` : ''}`, value: i, hasNfc: !!item.nfcUrl }))
+  .filter(item => item.hasNfc))
+const nfcSelectedItem = computed(() => detail.value?.items[selectedNfcItemIndex.value])
+const nfcWriteUrl = computed(() => {
+  if (!detail.value) return ''
+  if (detail.value.items.length === 1) return nfcSelectedItem.value?.nfcWriteUrl ?? detail.value.nfcWriteUrl ?? ''
+  return nfcSelectedItem.value?.nfcWriteUrl ?? ''
+})
+const nfcCustomerUrl = computed(() => nfcSelectedItem.value?.nfcUrl ?? detail.value?.nfcUrl ?? '')
+const multipleNfcDestinations = computed(() => new Set(
+  (detail.value?.items ?? []).map(item => item.nfcUrl?.trim()).filter(Boolean)
+).size > 1)
+const validNfcWriteUrl = computed(() => {
+  if (multipleNfcDestinations.value) return false
+  try { return !!nfcWriteUrl.value && new URL(nfcWriteUrl.value).protocol === 'https:' }
+  catch { return false }
+})
+
+async function writeNfc(): Promise<void> {
+  if (!validNfcWriteUrl.value || writingNfc.value) {
+    if (!validNfcWriteUrl.value) nfcMessage.value = 'El backend no devolvió un nfcWriteUrl HTTPS válido. No se grabó ninguna etiqueta.'
+    return
+  }
+  const constructor = (window as Window & { NDEFReader?: NdefConstructor }).NDEFReader
+  if (!constructor || !window.isSecureContext) {
+    nfcMessage.value = 'Este teléfono no puede grabar desde el navegador. Usa un Android con Chrome.'
+    return
+  }
+  writingNfc.value = true
+  const targetUrl = nfcWriteUrl.value
+  nfcMessage.value = 'Esperando: Acerca la etiqueta a la parte de atrás del teléfono.'
+  try {
+    const writer = new constructor()
+    // Nunca grabar nfcUrl del comprador: el chip almacena solo nfcWriteUrl.
+    await writer.write({ records: [{ recordType: 'url', data: targetUrl }] })
+    nfcMessage.value = 'Etiqueta lista. Al tocarla se abre el enlace del cliente.'
+  }
+  catch (e) {
+    const name = e instanceof DOMException ? e.name : ''
+    nfcMessage.value = name === 'NotFoundError' || name === 'TimeoutError'
+      ? 'No se encontró la etiqueta. Acércala otra vez y mantenla quieta un segundo.'
+      : name === 'NotAllowedError'
+        ? 'Permite el acceso NFC en el navegador para grabar la etiqueta.'
+        : 'No se pudo grabar la etiqueta. Revisa que NFC esté activado y vuelve a intentar.'
+  }
+  finally { writingNfc.value = false }
+}
+
+async function printPdf(kind: 'batch' | 'queue' | 'one', codigo?: string): Promise<void> {
+  if (printing.value) return
+  const codes = [...new Set(selected.value)].filter(c => inProduction.value.some(o => o.codigoOrden === c))
+  if (kind === 'queue' && inProduction.value.length > 50) {
+    snackbar.warning('La cola supera 50 pedidos. Selecciona un lote de hasta 50 códigos para imprimir.')
+    return
+  }
+  if (kind === 'batch' && (!codes.length || codes.length > 50)) {
+    snackbar.warning('Selecciona entre 1 y 50 pedidos por lote.')
+    return
+  }
+  const ok = await confirm({
+    title: 'Impresión de llaveros',
+    message: 'Papel A4. Imprime al 100% / tamaño real. No uses «Ajustar a la página». La barra negra debe medir 4.06 cm.',
+    confirmText: 'Generar PDF'
+  })
+  if (!ok) return
+  printing.value = true
+  try {
+    const blob = kind === 'batch' ? await service.printSelected(codes)
+      : kind === 'queue' ? await service.printQueue() : await service.reprint(codigo!)
+    if (blob.size < 5 || await blob.slice(0, 5).text() !== '%PDF-') throw new Error('El servidor no devolvió un PDF válido.')
+    downloadBlob(blob, kind === 'one' ? `impresion-${codigo}.pdf` : `impresion-lote-${kind === 'batch' ? codes.length : 'cola'}-llaveros.pdf`)
+    snackbar.success('PDF listo. Recuerda imprimir a tamaño real (100%).')
+  }
+  catch (e) { snackbar.error(isApiError(e) ? e : e instanceof Error ? e.message : 'No se pudo imprimir el lote.') }
+  finally { printing.value = false }
+}
+
+const allSelected = computed(() => inProduction.value.length > 0 && inProduction.value.every(o => selected.value.includes(o.codigoOrden)))
+function toggleAll(value: boolean | null): void { selected.value = value ? inProduction.value.map(o => o.codigoOrden) : [] }
 
 async function openDetail(codigo: string): Promise<void> {
   detailOpen.value = true
   detailLoading.value = true
   detail.value = null
+  nfcMessage.value = ''
+  selectedNfcItemIndex.value = 0
   try {
     detail.value = await service.getDetail(codigo)
+    const index = detail.value.items.findIndex(item => !!item.nfcUrl)
+    selectedNfcItemIndex.value = index >= 0 ? index : 0
   }
   catch (e) {
     detailOpen.value = false
@@ -67,8 +162,10 @@ const ready = ref<ProductionOrderDto[]>([])
 const loading = ref(true)
 const error = ref<ApiError | null>(null)
 const marking = ref<Set<string>>(new Set())
+const detailOrder = computed(() => inProduction.value.find(o => o.codigoOrden === detail.value?.codigoOrden))
 const now = ref(Date.now())
 let clock: ReturnType<typeof setInterval> | null = null
+let productionRefresh: ReturnType<typeof setInterval> | null = null
 
 const overdue = computed(() => inProduction.value.filter(o => elapsed(o) > ELABORATION_LIMIT_S).length)
 
@@ -89,6 +186,7 @@ async function load(silent = false): Promise<void> {
   try {
     const [a, b] = await Promise.all([service.listInProduction(), service.listReady()])
     inProduction.value = a
+    selected.value = selected.value.filter(code => a.some(o => o.codigoOrden === code))
     ready.value = b
   }
   catch (e) {
@@ -99,11 +197,16 @@ async function load(silent = false): Promise<void> {
   }
 }
 
+function markDetailReady(): void {
+  if (detailOrder.value) void markReady(detailOrder.value)
+}
+
 async function markReady(o: ProductionOrderDto): Promise<void> {
   marking.value = new Set([...marking.value, o.codigoOrden])
   try {
     await service.markReady(o.codigoOrden)
     snackbar.success(`#${o.codigoOrden} listo para entrega (${elapsedLabel(o)})`)
+    if (detail.value?.codigoOrden === o.codigoOrden) detailOpen.value = false
     await load(true)
   }
   catch (e) {
@@ -118,14 +221,17 @@ async function markReady(o: ProductionOrderDto): Promise<void> {
 
 realtime.on('OrderStatusChanged', () => void load(true))
 realtime.on('OrderCreated', () => void load(true))
-realtime.every(5000, () => load(true))
+// En taller seguimos consultando cada 5 s: /hubs/tracking es exclusivo de comprador.
 
 onMounted(() => {
+  nfcSupported.value = typeof window !== 'undefined' && window.isSecureContext && !!(window as Window & { NDEFReader?: NdefConstructor }).NDEFReader
   void load()
   clock = setInterval(() => (now.value = Date.now()), 1000)
+  productionRefresh = setInterval(() => { if (document.visibilityState === 'visible') void load(true) }, 5000)
 })
 onBeforeUnmount(() => {
   if (clock) clearInterval(clock)
+  if (productionRefresh) clearInterval(productionRefresh)
 })
 </script>
 
@@ -186,6 +292,19 @@ onBeforeUnmount(() => {
           /> En elaboración
           <span class="count">{{ inProduction.length }}</span>
         </h2>
+        <v-card border variant="tonal" class="pa-3 mb-3" rounded="lg">
+          <div class="d-flex align-center flex-wrap ga-2 mb-2">
+            <v-checkbox-btn :model-value="allSelected" label="Seleccionar todos" :disabled="!inProduction.length" @update:model-value="toggleAll" />
+            <v-spacer />
+            <v-chip size="small">{{ selected.length }} seleccionados</v-chip>
+          </div>
+          <div class="d-flex flex-wrap ga-2">
+            <v-btn color="primary" prepend-icon="mdi-printer" :disabled="!selected.length || selected.length > 50" :loading="printing" @click="printPdf('batch')">Imprimir seleccionados</v-btn>
+            <v-btn variant="tonal" prepend-icon="mdi-printer-outline" :disabled="!inProduction.length || inProduction.length > 50" :loading="printing" @click="printPdf('queue')">Imprimir toda la cola</v-btn>
+          </div>
+          <p class="text-caption text-medium-emphasis mt-2 mb-0">Máximo 50 llaveros por lote. Papel A4, escala 100%, sin ajustar a página.</p>
+        </v-card>
+        <v-alert v-if="inProduction.length > 50" type="warning" variant="tonal" density="compact" class="mb-3">La cola contiene más de 50 pedidos. Imprime lotes seleccionados de máximo 50.</v-alert>
         <StateEmpty
           v-if="inProduction.length === 0"
           icon="mdi-check-all"
@@ -207,6 +326,7 @@ onBeforeUnmount(() => {
             :class="{ 'card--late': elapsed(o) > ELABORATION_LIMIT_S }"
           >
             <div class="d-flex align-center ga-2 mb-1">
+              <v-checkbox-btn v-model="selected" :value="o.codigoOrden" :aria-label="`Seleccionar ${o.codigoOrden}`" />
               <strong>#{{ o.codigoOrden }}</strong>
               <v-spacer />
               <v-chip
@@ -219,9 +339,9 @@ onBeforeUnmount(() => {
               </v-chip>
             </div>
             <div class="text-body-2 text-medium-emphasis mb-3">
-              {{ o.areaEntrega }} · {{ formatQ(o.total) }} · desde {{ formatTime(o.fechaCreacion) }}
+              {{ (o.nicknameComprador || 'Comprador sin nombre disponible') + ' · ' }}{{ o.areaEntrega }} · {{ formatQ(o.total) }} · desde {{ formatTime(o.fechaCreacion) }}
             </div>
-            <div class="d-flex ga-2">
+            <div class="d-flex flex-wrap ga-2">
               <v-btn
                 variant="tonal"
                 prepend-icon="mdi-printer-outline"
@@ -230,6 +350,7 @@ onBeforeUnmount(() => {
               >
                 Diseño
               </v-btn>
+              <v-btn variant="text" class="text-none" size="small" prepend-icon="mdi-printer" :loading="printing" @click="printPdf('one', o.codigoOrden)">Reimprimir</v-btn>
               <v-btn
                 color="primary"
                 class="flex-1-1"
@@ -331,6 +452,22 @@ onBeforeUnmount(() => {
                 {{ detail.areaEntrega }}
               </v-chip>
             </div>
+            <v-card variant="tonal" class="pa-4 mb-4" rounded="lg">
+              <div class="font-weight-bold mb-2">NFC · Grabar el chip</div>
+              <v-select v-if="nfcItems.length > 1" v-model="selectedNfcItemIndex" :items="nfcItems" label="Llavero del pedido" density="comfortable" variant="outlined" class="mt-2" @update:model-value="nfcMessage = ''" />
+              <div class="text-body-2 mb-2">Enlace del cliente (solo lectura):</div>
+              <div class="text-body-2" style="overflow-wrap:anywhere">{{ nfcCustomerUrl || 'El detalle no incluye nfcUrl.' }}</div>
+              <v-alert v-if="multipleNfcDestinations" type="error" variant="tonal" density="compact" class="mt-3">Este pedido contiene distintos destinos NFC, pero el backend genera un único /n/ORD para toda la orden. No grabes esos chips hasta que el backend pueda distinguir los destinos por artículo.</v-alert>
+              <v-alert v-else-if="!validNfcWriteUrl" type="warning" variant="tonal" density="compact" class="mt-3">El detalle no incluye un nfcWriteUrl HTTPS válido. Solicita al backend que lo devuelva; nunca escribimos nfcUrl en el chip.</v-alert>
+              <v-btn block color="primary" prepend-icon="mdi-nfc" class="mt-3" :disabled="!nfcSupported || !validNfcWriteUrl" :loading="writingNfc" @click="writeNfc">Grabar NFC</v-btn>
+              <div class="text-caption mt-2">Acerca la etiqueta a la parte de atrás del teléfono y mantenla quieta un segundo.</div>
+              <div class="text-caption text-medium-emphasis">Usa Android con Chrome o Edge. iPhone no puede grabar desde el navegador.</div>
+              <v-alert v-if="!nfcSupported" type="info" density="compact" variant="tonal" class="mt-2">Este teléfono no puede grabar desde el navegador. Usa un Android con Chrome.</v-alert>
+              <v-alert v-if="nfcMessage" type="info" density="compact" variant="tonal" class="mt-2">{{ nfcMessage }}</v-alert>
+              <div v-if="nfcItems.length > 1" class="text-caption text-medium-emphasis mt-2">El backend genera el mismo enlace corto /n/ORD para todos los artículos de esta orden. Si contienen destinos distintos, consulta con backend antes de grabar múltiples chips.</div>
+              <v-btn variant="tonal" prepend-icon="mdi-printer" class="mt-3" :loading="printing" @click="printPdf('one', detail.codigoOrden)">Imprimir este llavero</v-btn>
+              <v-btn v-if="detailOrder" color="success" prepend-icon="mdi-check-circle-outline" class="mt-3 ml-sm-2" :loading="marking.has(detail.codigoOrden)" @click="markDetailReady">Marcar listo para entrega</v-btn>
+            </v-card>
             <section
               v-for="(item, i) in detail.items"
               :key="i"

@@ -87,7 +87,7 @@ async function crearCuenta() {
     auth.setSession(result.token)
     // qrCredential puede venir en la respuesta por compatibilidad: no se muestra ni se conserva.
     snackbar.success('Cuenta creada. La bienvenida se enviará por tus canales habilitados.')
-    await navigateTo('/mi-foto?nuevo=1')
+    await navigateTo('/mi-credencial?nuevo=1')
   }
   catch (error) {
     errorMessage.value = isApiError(error) ? error.message : 'No se pudo crear la cuenta.'

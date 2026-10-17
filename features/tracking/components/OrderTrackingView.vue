@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ApiError } from '~/types/api'
 import type { OrderTrackingDto } from '../types/tracking'
-import { useTrackingService } from '../services/trackingService'
+import { fromApiTracking, useTrackingService } from '../services/trackingService'
+import { connectOrderTracking } from '../services/orderTrackingSocket'
 import { useReceiptService } from '../services/receiptService'
 import OrderTimeline from './OrderTimeline.vue'
 import DeliveryQrCard from './DeliveryQrCard.vue'
@@ -38,6 +39,22 @@ const order = ref<OrderTrackingDto | null>(null)
 const loading = ref(true)
 const error = ref<ApiError | null>(null)
 const justChanged = ref(false)
+const socketMode = ref<'connecting' | 'live' | 'polling'>('connecting')
+let stopSocket: (() => Promise<void>) | null = null
+let refreshTimer: ReturnType<typeof setInterval> | null = null
+let mounted = false
+
+function applyUpdate(next: OrderTrackingDto): void {
+  if (!order.value || next.codigoOrden.toUpperCase() !== order.value.codigoOrden.toUpperCase()) return
+  const before = order.value.estado
+  order.value = next
+  if (next.estado !== before) {
+    justChanged.value = true
+    setTimeout(() => (justChanged.value = false), 1500)
+    const message = STATUS_TEXT[next.estado]
+    if (message) snackbar[next.estado === 'COMPRADOR_NO_ENCONTRADO' ? 'warning' : 'success'](message)
+  }
+}
 
 const STATUS_TEXT: Record<string, string> = {
   EN_ELABORACION: 'Tu pedido entró a elaboración',
@@ -73,30 +90,56 @@ async function load(): Promise<void> {
   }
 }
 
-/** Recarga y, si el estado cambió, anima y avisa. */
 async function refresh(): Promise<void> {
-  if (!order.value) return
-  const before = order.value.estado
-  try {
-    order.value = await service.getByCode(props.codigoOrden)
-  }
-  catch {
-    return // sin red momentánea: se reintenta en el siguiente ciclo
-  }
-  const now = order.value.estado
-  if (now === before) return
-  justChanged.value = true
-  setTimeout(() => (justChanged.value = false), 1500)
-  const text = STATUS_TEXT[now]
-  if (text) snackbar[now === 'COMPRADOR_NO_ENCONTRADO' ? 'warning' : 'success'](text)
+  if (!order.value || !mounted) return
+  try { applyUpdate(await service.getByCode(props.codigoOrden)) }
+  catch { /* una desconexión temporal no elimina el último estado */ }
 }
 
-// Tiempo real: el estado cambia sin recargar la página.
-// Con hub/simulador llegan eventos; sin hub, se consulta cada 5 s.
-realtime.on('OrderStatusChanged', (event) => {
-  if (order.value && event.codigoOrden === order.value.codigoOrden) void refresh()
-})
-realtime.every(5000, refresh)
+function startFallback(): void {
+  socketMode.value = 'polling'
+  if (!refreshTimer) refreshTimer = setInterval(() => {
+    if (document.visibilityState === 'visible' && navigator.onLine) void refresh()
+  }, 7000)
+  void refresh()
+}
+
+async function initializeTracking(): Promise<void> {
+  await load()
+  if (!order.value || !mounted) return
+  if (config.public.useMocks) {
+    socketMode.value = 'polling'
+    return
+  }
+  if (!useAuthStore().isBuyer) return
+  const auth = useAuthStore()
+  try {
+    stopSocket = await connectOrderTracking({
+      apiBase: String(config.public.apiBase),
+      codigoOrden: props.codigoOrden,
+      token: () => auth.accessToken,
+      onOrder: dto => { applyUpdate(fromApiTracking(dto)); socketMode.value = 'live' },
+      onReconnect: () => startFallback(),
+      onRefresh: () => { void refresh() },
+      onConnected: () => {
+        socketMode.value = 'live'
+        if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null }
+      },
+      onError: message => snackbar.error(message)
+    })
+    if (!mounted) { await stopSocket(); stopSocket = null; return }
+    socketMode.value = 'live'
+    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null }
+  }
+  catch { startFallback() }
+}
+
+if (config.public.useMocks) {
+  realtime.on('OrderStatusChanged', (event) => {
+    if (order.value && event.codigoOrden === order.value.codigoOrden) void refresh()
+  })
+  realtime.every(5000, refresh)
+}
 
 // Solo en modo simulado: para la demo.
 const mock = config.public.useMocks ? useMockOrders() : null
@@ -104,10 +147,19 @@ function simulateAdvance(): void {
   if (!mock?.advanceByCode(props.codigoOrden)) snackbar.info('Este pedido ya no avanza más.')
 }
 
-onMounted(async () => {
-  await load()
-  // Unirse al grupo de la orden en el hub (nombre del método PROVISIONAL).
-  if (order.value) void realtime.invoke('JoinOrderGroup', order.value.codigoOrden)
+onMounted(() => {
+  mounted = true
+  void initializeTracking()
+})
+onBeforeUnmount(() => {
+  mounted = false
+  if (refreshTimer) clearInterval(refreshTimer)
+  if (stopSocket) void stopSocket()
+})
+watch(() => props.codigoOrden, () => {
+  if (stopSocket) { void stopSocket(); stopSocket = null }
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null }
+  if (mounted) void initializeTracking()
 })
 </script>
 
@@ -133,7 +185,7 @@ onMounted(async () => {
       <header class="tracking__header">
         <div>
           <div class="text-caption text-medium-emphasis">
-            Pedido #{{ order.codigoOrden }} · {{ formatDateTime(order.fechaCreacion) }}
+            Tu pedido {{ order.codigoOrden }} · {{ formatDateTime(order.fechaCreacion) }}
           </div>
           <h1
             class="text-h5 font-weight-bold"
@@ -143,7 +195,9 @@ onMounted(async () => {
           </h1>
         </div>
         <v-spacer />
-        <RealtimeIndicator />
+        <v-chip size="small" :color="socketMode === 'live' ? 'success' : 'info'" variant="tonal" prepend-icon="mdi-update">
+          {{ socketMode === 'live' ? 'En vivo' : 'Actualización automática' }}
+        </v-chip>
       </header>
 
       <div class="tracking__grid">
@@ -155,7 +209,15 @@ onMounted(async () => {
           <OrderTimeline
             :estado="order.estado"
             :historial="order.historial"
+            :pasos="order.pasos"
           />
+          <p class="text-caption text-medium-emphasis mt-3 mb-0">Te avisamos aquí cuando cambie el estado. No es ubicación GPS.</p>
+          <v-divider class="my-3" />
+          <div class="text-subtitle-2 mb-2">Historial</div>
+          <div v-for="(h, i) in order.historial" :key="i" class="text-body-2 mb-2">
+            <strong>{{ h.estado.replaceAll('_', ' ') }}</strong> · {{ formatDateTime(h.fechaHora) }}
+            <div v-if="h.observacion" class="text-medium-emphasis">{{ h.observacion }}</div>
+          </div>
           <v-btn
             v-if="config.public.useMocks && !['ENTREGADO', 'COMPRADOR_NO_ENCONTRADO'].includes(order.estado)"
             size="small"

@@ -18,7 +18,7 @@ function go(): void {
     style="max-width: 520px"
   >
     <v-icon
-      icon="mdi-map-marker-path"
+      icon="mdi-timeline-clock-outline"
       size="48"
       color="primary"
       class="mb-3"
@@ -36,7 +36,7 @@ function go(): void {
       <v-text-field
         v-model="code"
         label="Código del pedido"
-        placeholder="NTC-1042"
+        placeholder="ORD-XXXX"
         prepend-inner-icon="mdi-pound"
         hide-details
         autocomplete="off"

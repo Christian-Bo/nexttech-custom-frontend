@@ -60,6 +60,18 @@ describe('Cliente HTTP (caja negra)', () => {
     expect((error as { message: string }).message).not.toContain('ORA-')
   })
 
+  it('429 de PDF con data de solo lectura conserva estado y mensaje, sin TypeError', async () => {
+    const body = new Blob([JSON.stringify({ detail: 'Demasiadas solicitudes. Intente nuevamente más tarde.' })], { type: 'application/problem+json' })
+    const error = Object.create({
+      get statusCode() { return 429 },
+      get status() { return 429 },
+      get data() { return body }
+    }) as Error
+    fetchMock.mockRejectedValue(error)
+    await expect(client('t')('/api/credential/preview', { responseType: 'blob' }))
+      .rejects.toMatchObject({ status: 429, code: 'TOO_MANY_REQUESTS', message: 'Demasiadas solicitudes. Intente nuevamente más tarde.' })
+  })
+
   it('error de una descarga (Blob) se lee como ProblemDetails', async () => {
     const blob = new Blob([JSON.stringify({ detail: 'Primero registra tu rostro.' })], { type: 'application/problem+json' })
     fetchMock.mockRejectedValue({ statusCode: 409, data: blob })

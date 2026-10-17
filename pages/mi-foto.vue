@@ -27,6 +27,7 @@ const auth = useAuthStore()
 const snackbar = useSnackbar()
 const { confirm } = useConfirm()
 const qr = useCredentialQr()
+const useMocks = !!useRuntimeConfig().public.useMocks
 
 const isNew = computed(() => route.query.nuevo === '1')
 const welcomeLink = computed(() => (isNew.value ? '/catalogo?bienvenida=1' : '/catalogo'))
@@ -69,6 +70,9 @@ function onSaved(value: { original: string, modified: string, state: PortraitSta
  * NO un código inventado en el navegador. No llama a /api/credential/issue.
  */
 async function downloadPersonal(): Promise<void> {
+  // V4: no emitir QR definitivo ni rotarlo desde el navegador.
+  // Se conserva el PDF local únicamente en modo demostración.
+  if (!useMocks) { await navigateTo('/mi-credencial'); return }
   if (!portrait.value || creatingPersonal.value) return
   if (lastPersonalPdf.value) {
     downloadBlob(lastPersonalPdf.value, credentialFileName(nickname.value))
@@ -148,12 +152,17 @@ async function downloadPersonal(): Promise<void> {
       </li>
     </ol>
 
+    <v-alert type="info" variant="tonal" class="mb-5">
+      Para emitir y recibir la credencial oficial con el mismo PDF por correo o WhatsApp, utiliza el nuevo editor de credenciales.
+      <v-btn to="/mi-credencial" color="primary" variant="text" prepend-icon="mdi-card-account-details-outline" class="ml-2">Crear credencial oficial</v-btn>
+    </v-alert>
+
     <template v-if="step === 'foto'">
       <h1 class="text-h4 font-weight-bold mb-2">
         Tu foto de perfil
       </h1>
       <p class="text-medium-emphasis mb-6">
-        Recorta tu rostro y dale tu estilo con filtros y stickers. Esta foto con filtros y stickers aparecerá en tu credencial personalizada. No necesitas registrarte de nuevo con la cámara para crearla.
+        Recorta tu rostro y dale tu estilo con filtros y stickers. Puedes editar esta foto con filtros y stickers como diseño artístico. La credencial oficial usa el retrato del enrolamiento y únicamente los stickers autorizados por el servidor.
       </p>
       <PortraitStudio @saved="onSaved" />
       <div
@@ -176,7 +185,7 @@ async function downloadPersonal(): Promise<void> {
         Tu credencial
       </h1>
       <p class="text-medium-emphasis mb-6">
-        Tu credencial incluye la fotografía y los stickers que elegiste.
+        Vista artística de tu fotografía con filtros y stickers. El documento oficial se genera en el editor de credenciales.
         <span v-if="seconds !== null">Terminaste tu foto en {{ seconds }} s.</span>
       </p>
 
@@ -238,7 +247,7 @@ async function downloadPersonal(): Promise<void> {
       </div>
 
       <v-alert
-        v-if="qr.willRotate.value && !lastPersonalPdf"
+        v-if="useMocks && qr.willRotate.value && !lastPersonalPdf"
         type="info"
         variant="tonal"
         density="compact"
@@ -273,7 +282,7 @@ async function downloadPersonal(): Promise<void> {
           :loading="creatingPersonal"
           @click="downloadPersonal"
         >
-          {{ lastPersonalPdf ? 'Volver a descargar mi credencial' : 'Descargar mi credencial (PDF)' }}
+          {{ useMocks ? 'Descargar PDF de demostración' : 'Crear y enviar credencial oficial' }}
         </v-btn>
       </div>
     </template>
