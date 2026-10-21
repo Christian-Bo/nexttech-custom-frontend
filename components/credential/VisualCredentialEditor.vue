@@ -206,7 +206,7 @@ onBeforeUnmount(() => { cancelDrag() })
         <h3 class="vc-fieldtitle">03 / Tu credencial QR</h3>
         <p v-if="!qrReady" class="vc-muted vc-muted--small">El código se genera y activa directamente en NextTech. Al crear uno nuevo, el anterior queda invalidado. No necesitas subir ninguna fotografía ni captura.</p>
         <p v-else class="vc-muted vc-muted--small">Tu QR está activo. Puedes cambiar tu diseño y descargar otro PDF sin generar un código diferente.</p>
-        <button v-if="!qrReady" class="vc-qr-upload" type="button" :disabled="qrBusy || !qrAllowed" @click="emit('activateCredential')">
+        <button v-if="!qrReady" class="vc-qr-upload vc-qr-upload--activar" type="button" :disabled="qrBusy || !qrAllowed" @click="emit('activateCredential')">
           <v-icon icon="mdi-shield-check-outline" size="20" /> {{ qrBusy ? 'Activando…' : 'Activar y descargar mi credencial' }}
         </button>
         <button v-else class="vc-qr-upload" type="button" :disabled="qrBusy || !portraitUrl" @click="emit('downloadCredential')">
@@ -887,6 +887,10 @@ onBeforeUnmount(() => { cancelDrag() })
 .vc-qr-file{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none}
 .vc-qr-upload{display:inline-flex;align-items:center;gap:9px;border:1px solid #77ccee;background:#173e63;border-radius:11px;color:#e6f8ff;font-size:12px;font-weight:750;padding:10px 13px;margin-top:10px;cursor:pointer}
 .vc-qr-upload:hover,.vc-qr-upload:focus-visible{background:#1e507c}
+/* Accion principal del paso 3: verde solido para que se lea como "tocá aquí". */
+.vc-qr-upload--activar{border-color:#22c55e;background:#22c55e;color:#06240f;box-shadow:0 6px 18px -6px #22c55e99}
+.vc-qr-upload--activar:hover,.vc-qr-upload--activar:focus-visible{background:#16a34a;border-color:#16a34a}
+.vc-qr-upload--activar:disabled{background:#1f3b2a;border-color:#2f5c42;color:#9ec4ad;box-shadow:none;cursor:not-allowed}
 .vc-qr-remove{margin:10px 0 0 13px}
 .vc-qr-error{font-size:12px;color:#ffb4b4;line-height:1.4;margin-top:10px}
 .vc-qr-note{color:#8eafcb;font-size:10px;line-height:1.5;margin:10px 0 0}
