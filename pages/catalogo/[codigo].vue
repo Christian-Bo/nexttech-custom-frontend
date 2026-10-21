@@ -28,6 +28,14 @@ const variant = computed<ProductVariant | null>(() =>
   product.value?.variantes.find(v => v.idVariante === variantId.value) ?? null
 )
 const shape = computed(() => (variant.value?.plantillas[0]?.forma ?? 'RECTANGULAR').toUpperCase())
+/** La pieza solo es un atajo si el producto admite diseño y hay variante elegida. */
+const enlaceEditor = computed(() => ({
+  path: '/personalizar',
+  query: { producto: variant.value?.codigoVariante }
+}))
+
+const puedeDisenar = computed(() => !!product.value?.permitePersonalizacion && !!variant.value)
+
 const sides = computed(() => [...(product.value?.zonas ?? [])].sort((a, b) => a.ordenVisual - b.ordenVisual))
 
 async function load(): Promise<void> {
@@ -98,17 +106,25 @@ onMounted(load)
     >
       <!-- Vista del producto -->
       <div class="stage">
-        <div
+        <!-- La pieza es el atajo al editor: tocarla es lo primero que intenta el comprador. -->
+        <component
+          :is="puedeDisenar ? 'NuxtLink' : 'div'"
+          :to="puedeDisenar ? enlaceEditor : undefined"
           class="stage__piece"
-          :class="`stage__piece--${shape.startsWith('CIRC') ? 'circle' : shape.startsWith('CUAD') ? 'square' : 'rect'}`"
+          :class="[
+            `stage__piece--${shape.startsWith('CIRC') ? 'circle' : shape.startsWith('CUAD') ? 'square' : 'rect'}`,
+            { 'stage__piece--clickable': puedeDisenar }
+          ]"
         >
           <span class="stage__hole" />
           <v-icon
-            icon="mdi-image-outline"
+            :icon="puedeDisenar ? 'mdi-palette-outline' : 'mdi-image-outline'"
             size="48"
           />
-          <span class="text-caption">Tu diseño aquí</span>
-        </div>
+          <span class="text-caption stage__cta">
+            {{ puedeDisenar ? 'Toca para diseñar tu llavero' : 'Tu diseño aquí' }}
+          </span>
+        </component>
         <div class="stage__sides">
           <v-chip
             v-for="z in sides"
@@ -267,6 +283,24 @@ onMounted(load)
   color: rgb(248 250 252 / 85%);
   background: linear-gradient(160deg, #3b82f6, #1e40af);
   box-shadow: 0 30px 60px -30px rgb(0 0 0 / 80%), 0 0 50px -14px rgb(37 99 235 / 70%);
+}
+
+.stage__piece--clickable {
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.stage__piece--clickable:hover,
+.stage__piece--clickable:focus-visible {
+  transform: translateY(-4px);
+  box-shadow: 0 36px 70px -28px rgb(0 0 0 / 85%), 0 0 60px -10px rgb(37 99 235 / 85%);
+}
+
+.stage__cta {
+  padding-inline: 16px;
+  text-align: center;
+  font-weight: 600;
 }
 
 .stage__piece--circle {
