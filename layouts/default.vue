@@ -66,6 +66,7 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
       flat
       border="b"
       density="comfortable"
+      :extension-height="smAndDown ? 46 : 0"
     >
       <div class="bar">
         <BrandLogo />
@@ -192,6 +193,22 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
           </v-list>
         </v-menu>
 
+        <!-- Cerrar sesion a la vista, sin tener que abrir el menu. -->
+        <v-btn
+          v-if="auth.isAuthenticated"
+          variant="text"
+          class="text-none ml-1"
+          :size="smAndDown ? 'small' : undefined"
+          :icon="smAndDown ? 'mdi-logout' : undefined"
+          :prepend-icon="smAndDown ? undefined : 'mdi-logout'"
+          :aria-label="smAndDown ? 'Cerrar sesión' : undefined"
+          @click="logout"
+        >
+          <template v-if="!smAndDown">
+            Salir
+          </template>
+        </v-btn>
+
         <!-- Ingresar siempre visible: en telefono es lo primero que busca quien ya tiene cuenta. -->
         <template v-if="!auth.isAuthenticated">
           <v-btn
@@ -214,6 +231,29 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
           </v-btn>
         </template>
       </div>
+
+      <!-- En telefono la navegacion baja a su propia fila en vez de esconderse en el menu. -->
+      <template #extension>
+        <nav
+          v-if="smAndDown"
+          class="bar__nav bar__nav--movil"
+          aria-label="Principal"
+        >
+          <NuxtLink
+            v-for="item in NAV"
+            :key="item.to"
+            :to="item.to"
+            class="bar__link bar__link--movil"
+            :class="{ 'bar__link--active': isActive(item.to) }"
+          >
+            <v-icon
+              :icon="item.icon"
+              size="18"
+            />
+            {{ item.label }}
+          </NuxtLink>
+        </nav>
+      </template>
     </v-app-bar>
 
     <v-main class="nt-layer">
@@ -261,6 +301,31 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
 
 .bar__link--active {
   color: var(--nt-text);
+}
+
+/* Fila de navegacion en telefono: se desliza de lado si no caben todos. */
+.bar__nav--movil {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.bar__nav--movil::-webkit-scrollbar {
+  display: none;
+}
+
+.bar__link--movil {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
 
 .bar__link--active::after {
