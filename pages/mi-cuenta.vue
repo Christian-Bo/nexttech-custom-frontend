@@ -8,6 +8,7 @@ import { isApiError } from '~/services/api'
 import type { ApiError } from '~/types/api'
 import type { AccessTokenResultDto } from '~/types/auth'
 import { formatDateTime } from '~/utils/format'
+import { GT_COUNTRY_PREFIX, GT_PHONE_DIGITS, gtPhoneRule, sanitizeGtInput, toBackendPhone, toLocalGtDigits } from '~/utils/phone'
 
 definePageMeta({
   middleware: [
@@ -43,16 +44,22 @@ const maxBirthDate = new Date().toISOString().slice(0, 10)
 const rules = {
   required: (v: string) => !!v?.trim() || 'Este campo es obligatorio.',
   nickname: (v: string) => v.trim().length <= 50 || 'Máximo 50 caracteres.',
-  phone: (v: string) => v.trim().length <= 25 || 'Máximo 25 caracteres.',
+  phone: gtPhoneRule,
   password: (v: string) =>
     (v.length >= 8 && /[A-Z]/.test(v) && /[a-z]/.test(v) && /\d/.test(v))
     || 'Mínimo 8 caracteres, con mayúscula, minúscula y número.',
   same: (v: string) => v === pwd.next || 'Las contraseñas no coinciden.'
 }
 
+/** El campo solo acepta dígitos y corta en 8: el +502 va como prefijo fijo. */
+const phoneLocal = computed({
+  get: () => form.phone,
+  set: (value: string) => { form.phone = sanitizeGtInput(value) }
+})
+
 const dirty = computed(() => !!profile.value && (
   form.nickname.trim() !== profile.value.nickname
-  || form.phone.trim() !== profile.value.phone
+  || form.phone !== toLocalGtDigits(profile.value.phone)
   || (form.birthDate || null) !== (profile.value.birthDate?.slice(0, 10) ?? null)
   || form.notification !== profile.value.notificationPreference.code
 ))
@@ -65,7 +72,7 @@ const initials = computed(() => (profile.value?.nickname ?? auth.nickname ?? '?'
 
 function fillForm(p: BuyerProfile): void {
   form.nickname = p.nickname
-  form.phone = p.phone
+  form.phone = toLocalGtDigits(p.phone)
   form.birthDate = p.birthDate?.slice(0, 10) ?? ''
   form.notification = p.notificationPreference.code
 }
@@ -107,12 +114,16 @@ function applyToken(token: AccessTokenResultDto): void {
 }
 
 async function saveProfile(): Promise<void> {
-  if (rules.required(form.nickname) !== true || rules.required(form.phone) !== true) return
+  if (rules.required(form.nickname) !== true) return
+  if (gtPhoneRule(form.phone) !== true) {
+    snackbar.error('Escribe los 8 dígitos de tu número (sin el 502).')
+    return
+  }
   savingProfile.value = true
   try {
     const result = await service.update({
       nickname: form.nickname,
-      phone: form.phone,
+      phone: toBackendPhone(form.phone),
       birthDate: form.birthDate || null,
       notificationPreferenceCode: form.notification
     })
@@ -233,9 +244,9 @@ onBeforeUnmount(() => {
             to="/mi-foto"
             color="primary"
             class="text-none"
-            prepend-icon="mdi-card-account-details-outline"
+            prepend-icon="mdi-image-edit-outline"
           >
-            Foto y credencial
+            Mi foto de perfil
           </v-btn>
         </div>
       </header>
@@ -269,11 +280,18 @@ onBeforeUnmount(() => {
               :disabled="savingProfile"
             />
             <v-text-field
-              v-model="form.phone"
+              v-model="phoneLocal"
               label="Teléfono"
               type="tel"
+              inputmode="numeric"
+              autocomplete="tel-national"
               variant="outlined"
-              prepend-inner-icon="mdi-phone-outline"
+              prepend-inner-icon="mdi-whatsapp"
+              :prefix="GT_COUNTRY_PREFIX"
+              :maxlength="GT_PHONE_DIGITS"
+              :counter="GT_PHONE_DIGITS"
+              placeholder="55550101"
+              hint="Solo los 8 dígitos. El 502 lo agrega el sistema."
               :rules="[rules.required, rules.phone]"
               :disabled="savingProfile"
             />
