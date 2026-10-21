@@ -128,13 +128,6 @@ onMounted(async () => {
       <h1 class="text-h5 font-weight-bold">
         Personaliza tu producto
       </h1>
-      <v-chip
-        v-if="template?.price !== undefined"
-        color="primary"
-        variant="tonal"
-      >
-        {{ formatQ(template.price) }}
-      </v-chip>
       <v-spacer />
       <v-select
         v-if="templates.length > 0"
@@ -184,6 +177,19 @@ onMounted(async () => {
         />
       </template>
     </ClientOnly>
+
+    <div
+      v-if="template?.price !== undefined"
+      class="d-flex align-center ga-2 mt-4"
+    >
+      <span class="text-body-2 text-medium-emphasis">Precio del producto</span>
+      <v-chip
+        color="primary"
+        variant="tonal"
+      >
+        {{ formatQ(template.price) }}
+      </v-chip>
+    </div>
 
     <!-- Confirmación -->
     <v-dialog
