@@ -77,6 +77,37 @@ function onFileSelected(event: Event): void {
   if (file) void handleImage(file)
 }
 
+/* ----- Deslizar con el dedo para girar entre lados ----- */
+const SWIPE_MIN_PX = 60
+let touchStartX = 0
+let touchStartY = 0
+
+function onTouchStart(event: TouchEvent): void {
+  const touch = event.changedTouches[0]
+  if (!touch) return
+  touchStartX = touch.clientX
+  touchStartY = touch.clientY
+}
+
+function onTouchEnd(event: TouchEvent): void {
+  if (editor.sideKeys.length < 2) return
+  // Si hay algo seleccionado el usuario está moviendo un objeto, no girando el producto.
+  if (editor.selection.value.kind !== null) return
+
+  const touch = event.changedTouches[0]
+  if (!touch) return
+  const dx = touch.clientX - touchStartX
+  const dy = touch.clientY - touchStartY
+
+  // Solo cuenta si el gesto fue claramente horizontal, para no pelear con el scroll.
+  if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) < Math.abs(dy) * 1.5) return
+
+  const actual = editor.sideKeys.indexOf(editor.activeSide.value)
+  const siguiente = (actual + (dx < 0 ? 1 : -1) + editor.sideKeys.length) % editor.sideKeys.length
+  const destino = editor.sideKeys[siguiente]
+  if (destino) editor.setSide(destino)
+}
+
 function onDrop(event: DragEvent): void {
   const file = event.dataTransfer?.files?.[0]
   if (file) void handleImage(file)
@@ -259,7 +290,7 @@ onBeforeUnmount(() => {
         </span>
       </div>
       <v-spacer />
-      <div class="d-flex ga-1">
+      <div class="customizer__actions">
         <v-btn
           icon="mdi-undo"
           variant="text"
@@ -385,6 +416,8 @@ onBeforeUnmount(() => {
         class="customizer__stage"
         @dragover.prevent
         @drop.prevent="onDrop"
+        @touchstart.passive="onTouchStart"
+        @touchend.passive="onTouchEnd"
       >
         <div
           class="flipper"
@@ -397,6 +430,18 @@ onBeforeUnmount(() => {
             :aria-hidden="isFlipped"
           >
             <canvas ref="canvasA" />
+            <button
+              v-if="editor.activeSideIsEmpty.value && !isFlipped"
+              type="button"
+              class="face__hint"
+              @click="imageDialog = true"
+            >
+              <v-icon
+                icon="mdi-image-plus"
+                size="34"
+              />
+              <span>Toca para agregar tu imagen</span>
+            </button>
           </div>
           <div
             v-if="editor.sideKeys.includes('B')"
@@ -405,6 +450,18 @@ onBeforeUnmount(() => {
             :aria-hidden="!isFlipped"
           >
             <canvas ref="canvasB" />
+            <button
+              v-if="editor.activeSideIsEmpty.value && isFlipped"
+              type="button"
+              class="face__hint"
+              @click="imageDialog = true"
+            >
+              <v-icon
+                icon="mdi-image-plus"
+                size="34"
+              />
+              <span>Toca para agregar tu imagen</span>
+            </button>
           </div>
         </div>
 
@@ -428,7 +485,7 @@ onBeforeUnmount(() => {
           </v-btn>
         </v-btn-toggle>
         <p class="text-caption text-medium-emphasis mt-2">
-          Arrastra una imagen aquí · Supr para eliminar · Ctrl+D para duplicar
+          Desliza para girar · Arrastra una imagen aquí · Supr para eliminar · Ctrl+D para duplicar
         </p>
       </section>
 
@@ -555,6 +612,19 @@ onBeforeUnmount(() => {
   gap: 12px;
 }
 
+.customizer__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+/* El nombre del producto puede ser largo: que corte y no empuje la fila. */
+.customizer__header > div:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .customizer__body {
   display: grid;
   grid-template-columns: 180px minmax(0, 1fr) 280px;
@@ -591,6 +661,33 @@ onBeforeUnmount(() => {
   background: var(--nt-surface);
   border: 1px solid var(--nt-border);
   border-radius: var(--nt-radius-lg);
+}
+
+/* Capa que invita a tocar el lienzo cuando el lado está vacío. */
+.face__hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  text-align: center;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgb(15 23 42 / 55%);
+  background: transparent;
+  border: 0;
+  border-radius: inherit;
+  cursor: pointer;
+}
+
+.face__hint:hover,
+.face__hint:focus-visible {
+  color: rgb(15 23 42 / 80%);
+  background: rgb(37 99 235 / 8%);
 }
 
 /* ---------- Flip ---------- */
@@ -702,6 +799,18 @@ onBeforeUnmount(() => {
 @media (max-width: 760px) {
   .customizer__body {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* En teléfono los botones de acción ocupan su propia fila completa. */
+@media (max-width: 560px) {
+  .customizer__actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .customizer__actions .v-btn:not(.v-btn--icon) {
+    flex: 1 1 auto;
   }
 }
 </style>
