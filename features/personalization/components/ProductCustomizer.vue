@@ -23,6 +23,8 @@ const props = defineProps<{
 const emit = defineEmits<{ complete: [result: DesignExport, nfcUrl: string] }>()
 const nfcUrl = ref(props.initialNfcUrl ?? '')
 const nfcError = ref('')
+/** true cuando el enlace ya es valido: cambia el bloque de "Obligatorio" a "Listo". */
+const nfcListo = computed(() => !nfcError.value && validateNfcCustomerUrl(nfcUrl.value) === null)
 watch(() => props.initialNfcUrl, (value) => { if (value) nfcUrl.value = value })
 
 const editor = useProductEditor(props.template)
@@ -296,14 +298,6 @@ onBeforeUnmount(() => {
         >
           Vista previa
         </v-btn>
-        <v-btn
-          color="primary"
-          prepend-icon="mdi-check"
-          :loading="finishing || saving"
-          @click="finish"
-        >
-          {{ finishText ?? 'Listo' }}
-        </v-btn>
       </div>
     </header>
 
@@ -496,22 +490,68 @@ onBeforeUnmount(() => {
         <EditorContextPanel :editor="editor" />
       </aside>
     </div>
-    <v-card variant="tonal" color="primary" class="pa-4 mt-4" rounded="lg">
-      <div class="text-subtitle-1 font-weight-bold mb-2">¿Qué se abre al tocar tu llavero?</div>
+    <!-- El enlace NFC es obligatorio para agregar al carrito: tiene que verse como un paso, no como un dato suelto. -->
+    <section
+      class="nfc"
+      :class="{ 'nfc--listo': nfcListo }"
+    >
+      <div class="nfc__head">
+        <span class="nfc__icon">
+          <v-icon
+            :icon="nfcListo ? 'mdi-check-bold' : 'mdi-nfc-tap'"
+            size="26"
+          />
+        </span>
+        <div class="nfc__titles">
+          <div class="nfc__title">
+            ¿Qué se abre al tocar tu llavero?
+            <v-chip
+              size="x-small"
+              :color="nfcListo ? 'success' : 'accent'"
+              variant="flat"
+              class="ml-2"
+            >
+              {{ nfcListo ? 'Listo' : 'Obligatorio' }}
+            </v-chip>
+          </div>
+          <p class="nfc__sub">
+            Tu llavero lleva un chip NFC. Pega aquí el enlace que quieras que se abra
+            cuando alguien lo acerque al teléfono: tu playlist, un video o tu perfil.
+          </p>
+        </div>
+      </div>
+
       <v-text-field
         v-model="nfcUrl"
-        label="Enlace NFC"
-        placeholder="https://open.spotify.com/... o el enlace de YouTube/Facebook"
-        hint="Pega el enlace https de tu playlist, video o perfil. Al tocar el llavero se abrirá eso."
-        persistent-hint
+        label="Pega tu enlace aquí"
+        placeholder="https://open.spotify.com/..."
+        prepend-inner-icon="mdi-link-variant"
         :counter="2048"
         :error-messages="nfcError ? [nfcError] : []"
-        variant="outlined"
+        variant="solo-filled"
+        flat
         bg-color="surface"
-        class="mt-2"
+        class="mt-4"
         @update:model-value="nfcError = ''"
       />
-    </v-card>
+    </section>
+
+    <!-- Ultimo paso: queda al final para no obligar a subir de nuevo. -->
+    <v-btn
+      color="primary"
+      variant="flat"
+      size="x-large"
+      block
+      class="text-none mt-5"
+      prepend-icon="mdi-cart-plus"
+      :loading="finishing || saving"
+      @click="finish"
+    >
+      {{ finishText ?? 'Listo' }}
+    </v-btn>
+    <p class="text-caption text-medium-emphasis text-center mt-2">
+      Revisa tu diseño y tu enlace antes de continuar.
+    </p>
 
     <!-- Diálogo: agregar imagen -->
     <v-dialog
@@ -676,6 +716,62 @@ onBeforeUnmount(() => {
   background: var(--nt-surface);
   border: 1px solid var(--nt-border);
   border-radius: var(--nt-radius-lg);
+}
+
+/* ---------- Enlace NFC ---------- */
+.nfc {
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid rgb(6 182 212 / 55%);
+  border-radius: var(--nt-radius-lg);
+  background:
+    linear-gradient(160deg, rgb(6 182 212 / 14%), rgb(15 23 42 / 92%));
+  box-shadow: 0 0 34px -14px rgb(6 182 212 / 75%);
+}
+
+.nfc--listo {
+  border-color: rgb(34 197 94 / 60%);
+  background: linear-gradient(160deg, rgb(34 197 94 / 12%), rgb(15 23 42 / 92%));
+  box-shadow: 0 0 30px -16px rgb(34 197 94 / 70%);
+}
+
+.nfc__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.nfc__icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  color: #06240f;
+  background: var(--nt-accent);
+}
+
+.nfc--listo .nfc__icon {
+  background: #22c55e;
+}
+
+.nfc__titles {
+  min-width: 0;
+}
+
+.nfc__title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--nt-text);
+}
+
+.nfc__sub {
+  margin: 6px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--nt-text-secondary);
 }
 
 /* Capa que invita a tocar el lienzo cuando el lado está vacío. */

@@ -125,9 +125,6 @@ onMounted(async () => {
     style="max-width: 1440px"
   >
     <div class="d-flex flex-wrap align-center ga-4 mb-6">
-      <h1 class="text-h5 font-weight-bold">
-        Personaliza tu producto
-      </h1>
       <v-spacer />
       <v-select
         v-if="templates.length > 0"
