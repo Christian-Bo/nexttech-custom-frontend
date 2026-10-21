@@ -314,6 +314,7 @@ onBeforeUnmount(() => {
         class="customizer__tools"
         aria-label="Herramientas"
       >
+        <span class="tools__label">Agregar:</span>
         <v-btn
           class="tool"
           variant="tonal"
@@ -491,7 +492,9 @@ onBeforeUnmount(() => {
       </section>
 
       <!-- Propiedades -->
+      <!-- Solo aparece cuando hay algo seleccionado: si no, es un recuadro vacio que estorba. -->
       <aside
+        v-if="editor.selection.value.count > 0"
         class="customizer__panel"
         aria-label="Propiedades del elemento"
       >
@@ -536,8 +539,6 @@ onBeforeUnmount(() => {
         prepend-inner-icon="mdi-link-variant"
         :counter="2048"
         :error-messages="nfcError ? [nfcError] : []"
-        hint="Podés escribirlo sin https://, lo completamos solo."
-        persistent-hint
         variant="solo-filled"
         flat
         bg-color="surface"
@@ -702,6 +703,14 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.tools__label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--nt-text-secondary);
 }
 
 .tool {
