@@ -192,15 +192,19 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
           </v-list>
         </v-menu>
 
-        <template v-if="!auth.isAuthenticated && !smAndDown">
+        <!-- Ingresar siempre visible: en telefono es lo primero que busca quien ya tiene cuenta. -->
+        <template v-if="!auth.isAuthenticated">
           <v-btn
             to="/login"
-            variant="text"
+            variant="outlined"
             class="text-none ml-1"
+            :size="smAndDown ? 'small' : undefined"
+            prepend-icon="mdi-login"
           >
             Ingresar
           </v-btn>
           <v-btn
+            v-if="!smAndDown"
             to="/registro"
             color="primary"
             variant="flat"

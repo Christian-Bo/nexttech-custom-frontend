@@ -84,6 +84,12 @@ export function useProductEditor(template: ProductTemplate) {
 
   const current = () => sides[activeSide.value]
 
+  /** true si el lado visible no tiene ningun objeto. Se recalcula al editar o cambiar de lado. */
+  const activeSideIsEmpty = computed(() => {
+    void historyVersion.value
+    return (sides[activeSide.value]?.canvas.getObjects().length ?? 0) === 0
+  })
+
   const canUndo = computed(() => {
     void historyVersion.value
     const rt = current()
@@ -299,9 +305,12 @@ export function useProductEditor(template: ProductTemplate) {
       const processed = await processImage(file)
       const { fileId } = await fileService.upload(processed)
       const img = await fabric.FabricImage.fromURL(createObjectUrl(processed)) as NtObject
-      const maxW = template.width * 0.7
-      const maxH = template.height * 0.7
-      const scale = Math.min(1, maxW / (img.width || maxW), maxH / (img.height || maxH))
+      // Cubre el lienzo completo con una sola escala para X e Y: encuadra solo,
+      // nunca deforma. Lo que sobra queda fuera del recorte, como en cualquier editor.
+      const scale = Math.max(
+        template.width / (img.width || template.width),
+        template.height / (img.height || template.height)
+      )
       img.set({ originX: 'center', originY: 'center', scaleX: scale, scaleY: scale })
       img.ntKind = 'image'
       img.fileId = fileId
@@ -557,6 +566,7 @@ export function useProductEditor(template: ProductTemplate) {
     activeSide,
     isReady,
     isBusy,
+    activeSideIsEmpty,
     hasChanges,
     lastSavedAt,
     selection,
