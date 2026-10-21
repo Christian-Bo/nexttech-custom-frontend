@@ -31,7 +31,7 @@ const errorMessage = ref('')
 
 /** Personal con contraseña temporal: se muestra el paso de cambio obligatorio. */
 const changeStep = ref<{ email: string, password: string } | null>(null)
-const altMethod = ref<'qr' | 'face' | null>(null)
+const altMethod = ref<'qr' | 'face' | 'rapido' | null>(null)
 
 onMounted(() => {
   if (auth.isAuthenticated && !auth.mustChangePassword) void navigateTo(homeFor(auth.actorType, auth.role))
@@ -262,6 +262,19 @@ function cerrarRecuperacion() {
       <div class="divider my-6">
         <span>o ingresa con</span>
       </div>
+      <!-- Acceso rápido 1:N: solo una fotografía, sin escribir nada. -->
+      <v-btn
+        color="primary"
+        variant="flat"
+        size="large"
+        block
+        class="text-none mb-3"
+        prepend-icon="mdi-face-recognition"
+        @click="altMethod = 'rapido'"
+      >
+        Ingresar con reconocimiento facial
+      </v-btn>
+
       <div class="d-flex ga-3">
         <v-btn
           variant="outlined"
@@ -274,10 +287,10 @@ function cerrarRecuperacion() {
         <v-btn
           variant="outlined"
           class="text-none flex-1-1"
-          prepend-icon="mdi-face-recognition"
+          prepend-icon="mdi-shield-account-outline"
           @click="altMethod = 'face'"
         >
-          Mi rostro
+          Rostro verificado
         </v-btn>
       </div>
 
@@ -298,8 +311,12 @@ function cerrarRecuperacion() {
         border
         class="pa-4"
       >
+        <FaceQuickLoginCard
+          v-if="altMethod === 'rapido'"
+          @success="onAltLogin"
+        />
         <QrLoginCard
-          v-if="altMethod === 'qr'"
+          v-else-if="altMethod === 'qr'"
           @success="onAltLogin"
         />
         <FaceLoginCard

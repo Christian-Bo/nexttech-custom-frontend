@@ -38,6 +38,22 @@ export function createAuthService(api: HttpClient) {
       await api('/api/auth/reset-password', { method: 'POST', body: { ...body } })
     },
 
+    /**
+     * Login facial rápido 1:N: identifica al comprador solo con una fotografía.
+     * No lleva identificador, ni reto, ni prueba de vida, ni imagen segmentada.
+     * El navegador NO fija Content-Type: lo pone solo con el boundary del FormData.
+     * Ante 401 mostrar SIEMPRE un mensaje genérico; nunca revelar candidatos.
+     */
+    identifyLogin: (image: Blob) => {
+      const form = new FormData()
+      form.append('image', image, 'rostro.jpg')
+      return api<AccessTokenResultDto>('/api/auth/face-identify-login', {
+        method: 'POST',
+        body: form,
+        timeout: 45_000
+      })
+    },
+
     /** Reto facial público (login sin JWT). */
     faceChallenge: () =>
       api<FaceChallengeDto>('/api/auth/face-challenge', { method: 'POST' }),
