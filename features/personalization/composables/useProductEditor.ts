@@ -1,5 +1,5 @@
 import { computed, getCurrentScope, onScopeDispose, ref, shallowRef } from 'vue'
-import type { Canvas, FabricObject } from 'fabric'
+import type { Canvas, Control, FabricObject } from 'fabric'
 import type {
   DesignExport,
   DesignJson,
@@ -57,6 +57,41 @@ const OBJECT_STYLE = {
   transparentCorners: false,
   borderScaleFactor: 2,
   padding: 6
+}
+
+/** Dibuja la X roja que aparece sobre el elemento seleccionado. */
+function renderDeleteControl(
+  ctx: CanvasRenderingContext2D,
+  left: number,
+  top: number,
+  _styleOverride: unknown,
+  fabricObject: FabricObject
+): void {
+  const size = 24
+  const arm = size * 0.22
+  ctx.save()
+  ctx.translate(left, top)
+  ctx.rotate(((fabricObject.angle ?? 0) * Math.PI) / 180)
+
+  ctx.beginPath()
+  ctx.arc(0, 0, size / 2, 0, Math.PI * 2)
+  ctx.fillStyle = '#ef4444'
+  ctx.fill()
+  ctx.lineWidth = 2
+  ctx.strokeStyle = '#ffffff'
+  ctx.stroke()
+
+  ctx.beginPath()
+  ctx.moveTo(-arm, -arm)
+  ctx.lineTo(arm, arm)
+  ctx.moveTo(arm, -arm)
+  ctx.lineTo(-arm, arm)
+  ctx.lineWidth = 2.5
+  ctx.lineCap = 'round'
+  ctx.strokeStyle = '#ffffff'
+  ctx.stroke()
+
+  ctx.restore()
 }
 
 /**
@@ -121,8 +156,42 @@ export function useProductEditor(template: ProductTemplate) {
     return new f.Rect({ width, height, rx: r, ry: r, left: 0, top: 0, originX: 'left', originY: 'top', absolutePositioned: true })
   }
 
+  /** Se arma una sola vez, cuando ya esta cargado Fabric. */
+  let deleteControl: Control | null = null
+
+  function ensureDeleteControl(): Control | null {
+    if (deleteControl || !fabric) return deleteControl
+    deleteControl = new fabric.Control({
+      x: 0.5,
+      y: -0.5,
+      offsetX: 14,
+      offsetY: -14,
+      cursorStyle: 'pointer',
+      sizeX: 26,
+      sizeY: 26,
+      // Area de toque mas grande que el dibujo: en telefono el dedo no es preciso.
+      touchSizeX: 40,
+      touchSizeY: 40,
+      render: renderDeleteControl,
+      mouseUpHandler: (_eventData, transform) => {
+        const target = transform.target
+        const canvas = target.canvas
+        canvas?.remove(target)
+        canvas?.discardActiveObject()
+        canvas?.requestRenderAll()
+        return true
+      }
+    })
+    return deleteControl
+  }
+
   function styleObject(obj: FabricObject): void {
     obj.set(OBJECT_STYLE)
+    const control = ensureDeleteControl()
+    // Las imagenes se borran con "Vaciar lado": ahi la X estorbaria al encuadre.
+    if (control && (obj as NtObject).ntKind !== 'image') {
+      obj.controls = { ...obj.controls, ntDelete: control }
+    }
   }
 
   function snapshot(rt: SideRuntime): string {
