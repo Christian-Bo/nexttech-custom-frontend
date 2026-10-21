@@ -208,7 +208,9 @@ export function useProductEditor(template: ProductTemplate) {
         preserveObjectStacking: true,
         backgroundColor: DEFAULT_BACKGROUND,
         selectionColor: 'rgba(6, 182, 212, 0.12)',
-        selectionBorderColor: '#06B6D4'
+        selectionBorderColor: '#06B6D4',
+        // Sin esto el lienzo se queda con el gesto y la pagina no scrollea en telefono.
+        allowTouchScrolling: true
       })
       canvas.clipPath = buildClipPath(f)
       const rt: SideRuntime = { canvas, history: [], index: -1 }
