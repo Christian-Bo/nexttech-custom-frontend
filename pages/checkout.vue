@@ -65,9 +65,22 @@ const confirmingCard = ref(false)
 const cardMessage = ref('')
 
 const selectedArea = computed(() => areas.value.find(a => a.idAreaEntrega === areaId.value) ?? null)
-const canSubmit = computed(() =>
-  !!areaId.value && reference.value.trim().length >= 3 && cart.items.length > 0 && !pendingCard.value && orders.paymentMethods.includes(payment.value)
-)
+
+/** Para llevar al comprador al campo que le falta. */
+const areasEl = ref<HTMLElement | null>(null)
+const referenceEl = ref<{ focus?: () => void } | null>(null)
+
+const REFERENCE_MIN = 3
+const areaLista = computed(() => !!areaId.value)
+const referenciaLista = computed(() => reference.value.trim().length >= REFERENCE_MIN)
+
+/** Que es lo primero que falta, en el orden en que aparece en pantalla. */
+const faltante = computed<'carrito' | 'area' | 'referencia' | null>(() => {
+  if (cart.items.length === 0) return 'carrito'
+  if (!areaLista.value) return 'area'
+  if (!referenciaLista.value) return 'referencia'
+  return null
+})
 
 function areaIcon(nombre: string): string {
   return AREA_ICONS[nombre.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()] ?? 'mdi-map-marker-outline'
@@ -128,8 +141,32 @@ function discardPendingCard(): void {
   cardMessage.value = ''
 }
 
+function irA(el: HTMLElement | null): void {
+  el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
 async function submit(): Promise<void> {
-  if (!canSubmit.value || !areaId.value || submitting.value) return
+  // pendingCard renderiza otra rama de la plantilla, pero el guard se queda por si eso cambia.
+  if (submitting.value || pendingCard.value) return
+
+  // El boton no se deshabilita: si falta algo, lo dice y lleva al campo.
+  if (faltante.value === 'carrito') {
+    snackbar.warning('Tu carrito está vacío. Agregá un producto antes de continuar.')
+    return
+  }
+  if (faltante.value === 'area') {
+    snackbar.warning('Elegí dónde querés recibir tu pedido.')
+    irA(areasEl.value)
+    return
+  }
+  if (faltante.value === 'referencia') {
+    snackbar.warning('Escribí una referencia para que el repartidor te encuentre.')
+    irA(referenceEl.value as unknown as HTMLElement | null)
+    referenceEl.value?.focus?.()
+    return
+  }
+  if (!areaId.value || !orders.paymentMethods.includes(payment.value)) return
+
   submitting.value = true
   try {
     const response = await orders.checkout({ idAreaEntrega: areaId.value, referenciaEntrega: reference.value, metodoPago: payment.value })
@@ -296,8 +333,16 @@ onMounted(load)
           <section class="step">
             <h2 class="step__title">
               <span class="step__num">1</span> ¿Dónde te lo entregamos?
+              <v-chip
+                size="x-small"
+                :color="areaLista ? 'success' : 'accent'"
+                variant="flat"
+              >
+                {{ areaLista ? 'Listo' : 'Obligatorio' }}
+              </v-chip>
             </h2>
             <div
+              ref="areasEl"
               class="areas"
               role="radiogroup"
               aria-label="Área de entrega"
@@ -323,17 +368,28 @@ onMounted(load)
                 >{{ a.descripcion }}</span>
               </button>
             </div>
+            <div class="refhead mt-5">
+              <span class="refhead__title">¿Cómo te reconoce el repartidor?</span>
+              <v-chip
+                size="x-small"
+                :color="referenciaLista ? 'success' : 'accent'"
+                variant="flat"
+              >
+                {{ referenciaLista ? 'Listo' : 'Obligatorio' }}
+              </v-chip>
+            </div>
             <v-textarea
+              ref="referenceEl"
               v-model="reference"
-              class="mt-4"
+              class="mt-2"
               label="Referencia para encontrarte"
               placeholder="Ej.: mesa junto a la ventana, suéter azul"
               variant="outlined"
               rows="2"
               auto-grow
+              persistent-placeholder
               :counter="REFERENCE_MAX"
               :maxlength="REFERENCE_MAX"
-              :rules="[(v: string) => v.trim().length >= 3 || 'Escribe una referencia (mínimo 3 caracteres).']"
             />
           </section>
 
@@ -407,18 +463,32 @@ onMounted(load)
             block
             class="text-none mt-4"
             prepend-icon="mdi-check"
-            :disabled="!canSubmit"
             :loading="submitting"
             @click="submit"
           >
             {{ payment === 'TARJETA' && !useMocks ? 'Continuar a pago seguro' : 'Confirmar pedido' }}
           </v-btn>
-          <p
-            v-if="!canSubmit"
-            class="text-caption text-medium-emphasis mt-2 text-center"
+
+          <!-- Lista viva de lo que falta: el boton sigue activo y explica al tocarlo. -->
+          <ul
+            v-if="faltante"
+            class="pendientes mt-3"
           >
-            Elige el área de entrega y escribe una referencia.
-          </p>
+            <li :class="{ 'pendientes--ok': areaLista }">
+              <v-icon
+                :icon="areaLista ? 'mdi-check-circle' : 'mdi-circle-outline'"
+                size="16"
+              />
+              Elegí el lugar de entrega
+            </li>
+            <li :class="{ 'pendientes--ok': referenciaLista }">
+              <v-icon
+                :icon="referenciaLista ? 'mdi-check-circle' : 'mdi-circle-outline'"
+                size="16"
+              />
+              Escribí una referencia
+            </li>
+          </ul>
         </aside>
       </div>
     </template>
@@ -495,6 +565,39 @@ onMounted(load)
 .area--on {
   border-color: var(--nt-accent);
   box-shadow: 0 0 0 2px rgb(6 182 212 / 35%);
+}
+
+.refhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.refhead__title {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.pendientes {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--nt-text-secondary);
+}
+
+.pendientes li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.pendientes--ok {
+  color: #22c55e;
+  text-decoration: line-through;
+  opacity: 0.75;
 }
 
 .summary {
