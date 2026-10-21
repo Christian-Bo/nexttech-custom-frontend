@@ -677,7 +677,7 @@ onBeforeUnmount(() => {
   font: inherit;
   font-size: 0.85rem;
   font-weight: 600;
-  color: rgb(15 23 42 / 55%);
+  color: #334155;
   background: transparent;
   border: 0;
   border-radius: inherit;
@@ -686,7 +686,7 @@ onBeforeUnmount(() => {
 
 .face__hint:hover,
 .face__hint:focus-visible {
-  color: rgb(15 23 42 / 80%);
+  color: #0f172a;
   background: rgb(37 99 235 / 8%);
 }
 
