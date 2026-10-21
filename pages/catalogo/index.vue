@@ -88,7 +88,7 @@ onMounted(load)
               variant="tonal"
               class="text-none"
               prepend-icon="mdi-card-account-details-outline"
-              to="/mi-foto?paso=credencial"
+              to="/mi-credencial"
             >
               Mi credencial
             </v-btn>

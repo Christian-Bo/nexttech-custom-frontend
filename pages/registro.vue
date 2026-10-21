@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useAuthService } from '~/services/authService'
 import { isApiError } from '~/services/api'
+import { GT_COUNTRY_PREFIX, GT_PHONE_DIGITS, gtPhoneRule, sanitizeGtInput, toBackendPhone } from '~/utils/phone'
 
 definePageMeta({ layout: 'auth' })
 useHead({ title: 'Crear cuenta | NextTech Custom' })
@@ -29,13 +30,19 @@ const rules = {
   required: (v: string) => !!v?.trim() || 'Este campo es obligatorio.',
   email: (v: string) =>
     (v.includes('@') && v.trim().length <= 150) || 'Escribe un correo válido.',
-  phone: (v: string) => v.trim().length <= 25 || 'Máximo 25 caracteres.',
+  phone: gtPhoneRule,
   nickname: (v: string) => v.trim().length <= 50 || 'Máximo 50 caracteres.',
   passwordLength: (v: string) => (v.length >= 8 && v.length <= 128) || 'Entre 8 y 128 caracteres.',
   passwordStrength: (v: string) =>
     (/[A-Z]/.test(v) && /[a-z]/.test(v) && /\d/.test(v))
     || 'Debe incluir mayúscula, minúscula y número.'
 }
+
+/** El campo solo acepta dígitos y corta en 8: el +502 va como prefijo fijo. */
+const phoneLocal = computed({
+  get: () => form.phone,
+  set: (value: string) => { form.phone = sanitizeGtInput(value) }
+})
 
 const passwordsMatch = computed(() =>
   !form.passwordConfirm || form.password === form.passwordConfirm
@@ -51,6 +58,7 @@ function validar(): string | null {
     return 'Completa todos los campos obligatorios.'
   }
   if (!form.email.includes('@')) return 'Escribe un correo válido.'
+  if (gtPhoneRule(form.phone) !== true) return 'Escribe los 8 dígitos de tu número (sin el 502).'
   if (form.password.length < 8 || form.password.length > 128) {
     return 'La contraseña debe tener entre 8 y 128 caracteres.'
   }
@@ -75,7 +83,7 @@ async function crearCuenta() {
   try {
     const result = await authService.register({
       email: form.email.trim(),
-      phone: form.phone.trim(),
+      phone: toBackendPhone(form.phone),
       nickname: form.nickname.trim(),
       password: form.password,
       birthDate: form.birthDate || null,
@@ -134,14 +142,19 @@ async function crearCuenta() {
       />
 
       <v-text-field
-        v-model="form.phone"
+        v-model="phoneLocal"
         label="Teléfono"
         type="tel"
-        autocomplete="tel"
+        inputmode="numeric"
+        autocomplete="tel-national"
         prepend-inner-icon="mdi-whatsapp"
         variant="outlined"
         color="accent"
-        hint="Para avisarte por WhatsApp, si lo activas abajo."
+        :prefix="GT_COUNTRY_PREFIX"
+        :maxlength="GT_PHONE_DIGITS"
+        :counter="GT_PHONE_DIGITS"
+        placeholder="55550101"
+        hint="Solo los 8 dígitos. Para avisarte por WhatsApp, si lo activas abajo."
         :rules="[rules.required, rules.phone]"
         :disabled="loading"
       />

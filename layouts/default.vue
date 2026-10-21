@@ -159,9 +159,14 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
                 title="Mis pedidos"
               />
               <v-list-item
-                to="/mi-foto"
+                to="/mi-credencial"
                 prepend-icon="mdi-card-account-details-outline"
-                title="Mi foto y credencial"
+                title="Mi credencial"
+              />
+              <v-list-item
+                to="/mi-foto"
+                prepend-icon="mdi-image-edit-outline"
+                title="Mi foto de perfil"
               />
             </template>
             <template v-if="auth.isAuthenticated">
