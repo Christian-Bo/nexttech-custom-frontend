@@ -253,18 +253,16 @@ onBeforeUnmount(() => {
     <!-- Encabezado -->
     <header class="customizer__header">
       <div>
-        <h2 class="text-h6 font-weight-bold">
-          {{ template.name }}
-          <v-chip
-            v-if="template.provisional"
-            size="x-small"
-            color="warning"
-            variant="tonal"
-            class="ml-2"
-          >
-            medidas provisionales
-          </v-chip>
-        </h2>
+        <!-- El nombre del producto ya aparece en el selector de arriba: no se repite. -->
+        <v-chip
+          v-if="template.provisional"
+          size="x-small"
+          color="warning"
+          variant="tonal"
+          class="mr-2"
+        >
+          medidas provisionales
+        </v-chip>
         <span class="text-caption text-medium-emphasis">
           <v-icon
             icon="mdi-cloud-check-outline"
