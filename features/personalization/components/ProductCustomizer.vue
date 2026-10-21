@@ -6,7 +6,7 @@ import { useProductEditor } from '../composables/useProductEditor'
 import { EDITOR_COLORS, STICKERS } from '../config/products'
 import EditorContextPanel from './EditorContextPanel.vue'
 import { ImageValidationError } from '~/utils/image'
-import { validateNfcCustomerUrl } from '../services/nfcValidation'
+import { normalizeNfcCustomerUrl, validateNfcCustomerUrl } from '../services/nfcValidation'
 
 /**
  * Editor de personalización (client-only: usar dentro de <ClientOnly>).
@@ -23,6 +23,12 @@ const props = defineProps<{
 const emit = defineEmits<{ complete: [result: DesignExport, nfcUrl: string] }>()
 const nfcUrl = ref(props.initialNfcUrl ?? '')
 const nfcError = ref('')
+/** Al salir del campo se completa el protocolo para que el comprador vea lo que se va a guardar. */
+function completarEnlace(): void {
+  const completo = normalizeNfcCustomerUrl(nfcUrl.value)
+  if (completo !== nfcUrl.value) nfcUrl.value = completo
+}
+
 /** true cuando el enlace ya es valido: cambia el bloque de "Obligatorio" a "Listo". */
 const nfcListo = computed(() => !nfcError.value && validateNfcCustomerUrl(nfcUrl.value) === null)
 watch(() => props.initialNfcUrl, (value) => { if (value) nfcUrl.value = value })
@@ -147,7 +153,8 @@ async function openPreview(): Promise<void> {
 }
 
 async function finish(): Promise<void> {
-  const url = nfcUrl.value.trim()
+  // Se envia la URL con el protocolo completo, no lo que el comprador tecleo.
+  const url = normalizeNfcCustomerUrl(nfcUrl.value)
   const urlError = validateNfcCustomerUrl(url)
   if (urlError) {
     nfcError.value = urlError
@@ -528,11 +535,14 @@ onBeforeUnmount(() => {
         prepend-inner-icon="mdi-link-variant"
         :counter="2048"
         :error-messages="nfcError ? [nfcError] : []"
+        hint="Podés escribirlo sin https://, lo completamos solo."
+        persistent-hint
         variant="solo-filled"
         flat
         bg-color="surface"
         class="mt-4"
         @update:model-value="nfcError = ''"
+        @blur="completarEnlace"
       />
     </section>
 
