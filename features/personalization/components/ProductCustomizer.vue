@@ -250,22 +250,6 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="customizer">
-    <v-card variant="tonal" color="primary" class="pa-4 mb-4" rounded="lg">
-      <div class="text-subtitle-1 font-weight-bold mb-2">¿Qué se abre al tocar tu llavero?</div>
-      <v-text-field
-        v-model="nfcUrl"
-        label="Enlace NFC"
-        placeholder="https://open.spotify.com/... o el enlace de YouTube/Facebook"
-        hint="Pega el enlace https de tu playlist, video o perfil. Al tocar el llavero se abrirá eso."
-        persistent-hint
-        :counter="2048"
-        :error-messages="nfcError ? [nfcError] : []"
-        variant="outlined"
-        bg-color="surface"
-        class="mt-2"
-        @update:model-value="nfcError = ''"
-      />
-    </v-card>
     <!-- Encabezado -->
     <header class="customizer__header">
       <div>
@@ -484,8 +468,25 @@ onBeforeUnmount(() => {
             {{ z.name }}
           </v-btn>
         </v-btn-toggle>
+        <v-btn
+          v-if="!editor.activeSideIsEmpty.value"
+          :color="editor.manualAdjust.value ? 'accent' : undefined"
+          :variant="editor.manualAdjust.value ? 'flat' : 'outlined'"
+          size="small"
+          class="text-none mt-3"
+          :prepend-icon="editor.manualAdjust.value ? 'mdi-lock-open-variant-outline' : 'mdi-cursor-move'"
+          @click="editor.setManualAdjust(!editor.manualAdjust.value)"
+        >
+          {{ editor.manualAdjust.value ? 'Terminar ajuste manual' : 'Ajuste manual' }}
+        </v-btn>
+
         <p class="text-caption text-medium-emphasis mt-2">
-          Desliza para girar · Arrastra una imagen aquí · Supr para eliminar · Ctrl+D para duplicar
+          <template v-if="editor.manualAdjust.value">
+            Arrastra la imagen para acomodarla · Supr para eliminar · Ctrl+D para duplicar
+          </template>
+          <template v-else>
+            Tu imagen ya quedó encuadrada · Desliza para girar al otro lado
+          </template>
         </p>
       </section>
 
@@ -497,6 +498,22 @@ onBeforeUnmount(() => {
         <EditorContextPanel :editor="editor" />
       </aside>
     </div>
+    <v-card variant="tonal" color="primary" class="pa-4 mt-4" rounded="lg">
+      <div class="text-subtitle-1 font-weight-bold mb-2">¿Qué se abre al tocar tu llavero?</div>
+      <v-text-field
+        v-model="nfcUrl"
+        label="Enlace NFC"
+        placeholder="https://open.spotify.com/... o el enlace de YouTube/Facebook"
+        hint="Pega el enlace https de tu playlist, video o perfil. Al tocar el llavero se abrirá eso."
+        persistent-hint
+        :counter="2048"
+        :error-messages="nfcError ? [nfcError] : []"
+        variant="outlined"
+        bg-color="surface"
+        class="mt-2"
+        @update:model-value="nfcError = ''"
+      />
+    </v-card>
 
     <!-- Diálogo: agregar imagen -->
     <v-dialog
@@ -799,6 +816,11 @@ onBeforeUnmount(() => {
 @media (max-width: 760px) {
   .customizer__body {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* En telefono lo primero que debe ver el comprador es la pieza, no las herramientas. */
+  .customizer__stage {
+    order: -1;
   }
 }
 
