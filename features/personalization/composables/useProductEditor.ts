@@ -79,6 +79,8 @@ export function useProductEditor(template: ProductTemplate) {
   const lastSavedAt = ref<Date | null>(null)
   const selection = shallowRef<EditorSelection>({ kind: null, count: 0 })
   const historyVersion = ref(0)
+  /** Con false las imagenes quedan fijas: asi deslizar no las arrastra sin querer. */
+  const manualAdjust = ref(false)
 
   const draftKey = `nt-editor-draft:${template.code}`
 
@@ -251,6 +253,28 @@ export function useProductEditor(template: ProductTemplate) {
 
   // ---------- agregar contenido ----------
 
+  /** Las imagenes se mueven solo en modo ajuste manual. Texto y stickers siempre. */
+  function applyImageLock(): void {
+    for (const key of sideKeys) {
+      const canvas = sides[key]?.canvas
+      if (!canvas) continue
+      canvas.getObjects().forEach((o) => {
+        if ((o as NtObject).ntKind !== 'image') return
+        o.set({ selectable: manualAdjust.value, evented: manualAdjust.value })
+        o.setCoords()
+      })
+      if (!manualAdjust.value) canvas.discardActiveObject()
+      canvas.requestRenderAll()
+    }
+  }
+
+  function setManualAdjust(value: boolean): void {
+    manualAdjust.value = value
+    applyImageLock()
+    readSelection()
+    historyVersion.value++
+  }
+
   function addToCanvas(obj: NtObject): void {
     const canvas = current()?.canvas
     if (!canvas) return
@@ -316,6 +340,8 @@ export function useProductEditor(template: ProductTemplate) {
       img.fileId = fileId
       img.ntFilter = 'none'
       addToCanvas(img)
+      // Queda encuadrada y fija: el cliente no tiene que acomodar nada.
+      applyImageLock()
     }
     finally {
       isBusy.value = false
@@ -495,6 +521,7 @@ export function useProductEditor(template: ProductTemplate) {
       rt.history = [snapshot(rt)]
       rt.index = 0
     }
+    applyImageLock()
     historyVersion.value++
   }
 
@@ -567,6 +594,8 @@ export function useProductEditor(template: ProductTemplate) {
     isReady,
     isBusy,
     activeSideIsEmpty,
+    manualAdjust,
+    setManualAdjust,
     hasChanges,
     lastSavedAt,
     selection,
