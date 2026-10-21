@@ -397,6 +397,7 @@ onBeforeUnmount(() => {
       <section
         ref="stageWrap"
         class="customizer__stage"
+        :class="{ 'customizer__stage--manual': editor.manualAdjust.value }"
         @dragover.prevent
         @drop.prevent="onDrop"
         @touchstart.passive="onTouchStart"
@@ -728,6 +729,12 @@ onBeforeUnmount(() => {
   border-radius: var(--nt-radius-lg);
 }
 
+/* En ajuste manual el lienzo necesita el gesto completo para arrastrar la imagen. */
+.customizer__stage--manual .face,
+.customizer__stage--manual .flipper {
+  touch-action: none;
+}
+
 /* ---------- Enlace NFC ---------- */
 .nfc {
   margin-top: 20px;
@@ -814,6 +821,7 @@ onBeforeUnmount(() => {
 /* ---------- Flip ---------- */
 .flipper {
   position: relative;
+  touch-action: pan-y;
   transform-style: preserve-3d;
   transition: transform 650ms cubic-bezier(0.4, 0.2, 0.2, 1);
 }
@@ -825,6 +833,8 @@ onBeforeUnmount(() => {
 .face {
   position: absolute;
   inset: 0;
+  /* El dedo hacia abajo scrollea la pagina; el horizontal queda para girar el producto. */
+  touch-action: pan-y;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   filter: drop-shadow(0 12px 28px rgb(0 0 0 / 45%));
