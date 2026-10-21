@@ -36,6 +36,12 @@ const enlaceEditor = computed(() => ({
 
 const puedeDisenar = computed(() => !!product.value?.permitePersonalizacion && !!variant.value)
 
+/** Mismo destino que el boton "Personalizar" de mas abajo. */
+async function irAlEditor(): Promise<void> {
+  if (!puedeDisenar.value) return
+  await navigateTo(enlaceEditor.value)
+}
+
 const sides = computed(() => [...(product.value?.zonas ?? [])].sort((a, b) => a.ordenVisual - b.ordenVisual))
 
 async function load(): Promise<void> {
@@ -107,14 +113,18 @@ onMounted(load)
       <!-- Vista del producto -->
       <div class="stage">
         <!-- La pieza es el atajo al editor: tocarla es lo primero que intenta el comprador. -->
-        <component
-          :is="puedeDisenar ? 'NuxtLink' : 'div'"
-          :to="puedeDisenar ? enlaceEditor : undefined"
+        <!-- La pieza es el atajo al editor: tocarla es lo primero que intenta el comprador. -->
+        <div
           class="stage__piece"
           :class="[
             `stage__piece--${shape.startsWith('CIRC') ? 'circle' : shape.startsWith('CUAD') ? 'square' : 'rect'}`,
             { 'stage__piece--clickable': puedeDisenar }
           ]"
+          :role="puedeDisenar ? 'button' : undefined"
+          :tabindex="puedeDisenar ? 0 : undefined"
+          @click="irAlEditor"
+          @keydown.enter.prevent="irAlEditor"
+          @keydown.space.prevent="irAlEditor"
         >
           <span class="stage__hole" />
           <v-icon
@@ -124,7 +134,7 @@ onMounted(load)
           <span class="text-caption stage__cta">
             {{ puedeDisenar ? 'Toca para diseñar tu llavero' : 'Tu diseño aquí' }}
           </span>
-        </component>
+        </div>
         <div class="stage__sides">
           <v-chip
             v-for="z in sides"
@@ -289,6 +299,16 @@ onMounted(load)
   cursor: pointer;
   text-decoration: none;
   transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+/* El agujero y los iconos no deben robarse el toque. */
+.stage__piece--clickable > * {
+  pointer-events: none;
+}
+
+.stage__piece--clickable:focus-visible {
+  outline: 3px solid rgb(6 182 212 / 80%);
+  outline-offset: 4px;
 }
 
 .stage__piece--clickable:hover,
