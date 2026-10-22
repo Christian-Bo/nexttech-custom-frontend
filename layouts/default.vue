@@ -66,7 +66,6 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
       flat
       border="b"
       density="comfortable"
-      :extension-height="smAndDown ? 46 : 0"
     >
       <div class="bar">
         <BrandLogo />
@@ -106,25 +105,22 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
 
         <v-menu location="bottom end">
           <template #activator="{ props }">
+            <!-- En telefono siempre las tres barritas, haya sesion o no. -->
             <v-btn
-              v-if="auth.isAuthenticated"
-              v-bind="props"
-              variant="tonal"
-              class="text-none ml-1"
-              :prepend-icon="smAndDown ? undefined : 'mdi-account-circle-outline'"
-              :icon="smAndDown ? 'mdi-account-circle-outline' : undefined"
-              :aria-label="smAndDown ? 'Mi cuenta' : undefined"
-            >
-              <template v-if="!smAndDown">
-                {{ auth.nickname ?? roleLabel ?? 'Mi cuenta' }}
-              </template>
-            </v-btn>
-            <v-btn
-              v-else-if="smAndDown"
+              v-if="smAndDown"
               v-bind="props"
               icon="mdi-menu"
               aria-label="Menú"
             />
+            <v-btn
+              v-else-if="auth.isAuthenticated"
+              v-bind="props"
+              variant="tonal"
+              class="text-none ml-1"
+              prepend-icon="mdi-account-circle-outline"
+            >
+              {{ auth.nickname ?? roleLabel ?? 'Mi cuenta' }}
+            </v-btn>
           </template>
 
           <v-list
@@ -232,28 +228,6 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
         </template>
       </div>
 
-      <!-- En telefono la navegacion baja a su propia fila en vez de esconderse en el menu. -->
-      <template #extension>
-        <nav
-          v-if="smAndDown"
-          class="bar__nav bar__nav--movil"
-          aria-label="Principal"
-        >
-          <NuxtLink
-            v-for="item in NAV"
-            :key="item.to"
-            :to="item.to"
-            class="bar__link bar__link--movil"
-            :class="{ 'bar__link--active': isActive(item.to) }"
-          >
-            <v-icon
-              :icon="item.icon"
-              size="18"
-            />
-            {{ item.label }}
-          </NuxtLink>
-        </nav>
-      </template>
     </v-app-bar>
 
     <v-main class="nt-layer">
@@ -301,31 +275,6 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
 
 .bar__link--active {
   color: var(--nt-text);
-}
-
-/* Fila de navegacion en telefono: se desliza de lado si no caben todos. */
-.bar__nav--movil {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  padding: 0 4px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.bar__nav--movil::-webkit-scrollbar {
-  display: none;
-}
-
-.bar__link--movil {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-  padding: 6px 10px;
-  font-size: 0.85rem;
-  white-space: nowrap;
 }
 
 .bar__link--active::after {
