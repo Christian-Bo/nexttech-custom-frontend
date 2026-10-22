@@ -189,20 +189,26 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
           </v-list>
         </v-menu>
 
-        <!-- Cerrar sesion a la vista, sin tener que abrir el menu. -->
+        <!-- Cerrar sesion a la vista, sin tener que abrir el menu.
+             Dos botones separados a proposito: mezclar la prop `icon` con un slot
+             vacio hace que Vuetify dibuje el slot y el boton quede invisible. -->
         <v-btn
-          v-if="auth.isAuthenticated"
-          variant="text"
+          v-if="auth.isAuthenticated && smAndDown"
+          icon="mdi-logout"
+          variant="tonal"
+          size="small"
+          class="ml-1"
+          aria-label="Cerrar sesión"
+          @click="logout"
+        />
+        <v-btn
+          v-else-if="auth.isAuthenticated"
+          variant="tonal"
           class="text-none ml-1"
-          :size="smAndDown ? 'small' : undefined"
-          :icon="smAndDown ? 'mdi-logout' : undefined"
-          :prepend-icon="smAndDown ? undefined : 'mdi-logout'"
-          :aria-label="smAndDown ? 'Cerrar sesión' : undefined"
+          prepend-icon="mdi-logout"
           @click="logout"
         >
-          <template v-if="!smAndDown">
-            Salir
-          </template>
+          Salir
         </v-btn>
 
         <!-- Ingresar siempre visible: en telefono es lo primero que busca quien ya tiene cuenta. -->
