@@ -19,11 +19,18 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-type Step = 'neutral' | 'challenge' | 'sending'
+/**
+ * 'warmup' existe para que el reloj del reto NO corra mientras se descarga
+ * MediaPipe (WASM + modelo, varios MB desde el CDN) y se enciende la cámara.
+ * Antes el reto se pedía primero y esa espera se comía casi todo el minuto:
+ * el usuario alcanzaba a hacer el movimiento, pero llegaba expirado al servidor.
+ * Ahora el reto se pide cuando la cara YA está encuadrada y el detector listo.
+ */
+type Step = 'warmup' | 'neutral' | 'challenge' | 'sending'
 
 const videoEl = ref<HTMLVideoElement | null>(null)
 const camera = useCamera('user')
-const step = ref<Step>('neutral')
+const step = ref<Step>('warmup')
 const message = ref('Preparando la detección facial…')
 const progress = ref(0)
 const remaining = ref(0)
@@ -33,15 +40,36 @@ const error = ref<string | null>(null)
 
 const expired = computed(() => !!props.challenge && remaining.value <= 0)
 const action = computed(() => (props.challenge?.action ?? '').toUpperCase())
+
+/**
+ * El video se muestra en espejo (CSS `scaleX(-1)`), pero los puntos de MediaPipe
+ * y la foto que se envía NO están en espejo. Por eso la flecha va al revés del
+ * nombre del movimiento: para que la nariz quede a la izquierda de la FOTO, en
+ * la pantalla el usuario ve su nariz irse hacia la DERECHA.
+ */
 const hint = computed(() => {
   if (action.value.includes('BLINK')) return { icon: 'mdi-eye-outline', text: 'Parpadea' }
   if (action.value.includes('SMILE')) return { icon: 'mdi-emoticon-happy-outline', text: 'Sonríe' }
-  if (action.value.includes('UP')) return { icon: 'mdi-arrow-up-bold', text: 'Mira hacia arriba' }
-  if (action.value.includes('DOWN')) return { icon: 'mdi-arrow-down-bold', text: 'Mira hacia abajo' }
-  if (action.value.includes('LEFT')) return { icon: 'mdi-arrow-left-bold', text: 'Gira la cabeza hacia tu derecha' }
-  if (action.value.includes('RIGHT')) return { icon: 'mdi-arrow-right-bold', text: 'Gira la cabeza hacia tu izquierda' }
+  if (action.value.includes('UP')) return { icon: 'mdi-arrow-up-bold', text: 'Levanta un poco la barbilla' }
+  if (action.value.includes('DOWN')) return { icon: 'mdi-arrow-down-bold', text: 'Baja un poco la barbilla' }
+  if (action.value.includes('LEFT')) return { icon: 'mdi-arrow-right-bold', text: 'Gira despacio la cabeza hacia tu derecha' }
+  if (action.value.includes('RIGHT')) return { icon: 'mdi-arrow-left-bold', text: 'Gira despacio la cabeza hacia tu izquierda' }
   return { icon: 'mdi-face-recognition', text: 'Sigue el movimiento indicado' }
 })
+
+const ACCION_CONOCIDA = /BLINK|SMILE|UP|DOWN|LEFT|RIGHT/
+
+/**
+ * El texto del backend describe el movimiento en coordenadas de la imagen
+ * ("hasta que la nariz se desplace hacia el lado izquierdo de la imagen
+ * capturada"), que al usuario no le dice nada. Se prefiere la frase corta y
+ * solo se cae al texto del servidor si la acción no se reconoce.
+ */
+const textoMovimiento = computed(() => (
+  ACCION_CONOCIDA.test(action.value)
+    ? hint.value.text
+    : (props.challenge?.instruction || 'Sigue el movimiento indicado.')
+))
 
 let landmarker: FaceLandmarker | null = null
 let scanInterval: ReturnType<typeof setInterval> | null = null
@@ -56,9 +84,25 @@ let neutralYaw = 0
 let neutralNoseY = 0
 let fallbackExpiryMs = 0
 let processingFrame = false
+/** Evita pedir varios retos seguidos mientras el servidor responde. */
+let retoPedido = false
 
+const WARMUP_HOLD_MS = 600
 const NEUTRAL_HOLD_MS = 1200
 const CHALLENGE_HOLD_MS = 450
+/** Giro mínimo exigido, en anchos de ojo. Mismo valor de siempre. */
+const YAW_TARGET = 0.17
+/** Una vez alcanzado el giro, un temblor leve ya no reinicia la cuenta. */
+const YAW_HOLD_TOLERANCE = 0.85
+
+function pedirReto(forzar = false): void {
+  if (disposed) return
+  if (forzar) retoPedido = false
+  if (retoPedido) return
+  retoPedido = true
+  progress.value = 0
+  emit('request-challenge')
+}
 
 function updateRemaining(): void {
   if (!props.challenge) {
@@ -68,9 +112,14 @@ function updateRemaining(): void {
   const parsed = Date.parse(props.challenge.expiresAtUtc)
   const endsAt = Number.isFinite(parsed) ? parsed : fallbackExpiryMs
   remaining.value = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000))
-  if (remaining.value === 0 && step.value !== 'sending') {
+
+  // Caducó a media prueba: se pide otro automáticamente en vez de dejar al
+  // usuario viendo un botón. La cámara y el detector ya están calientes.
+  if (remaining.value === 0 && step.value !== 'sending' && step.value !== 'warmup') {
     progress.value = 0
-    message.value = 'El reto expiró. Solicita uno nuevo.'
+    step.value = 'warmup'
+    message.value = 'La prueba caducó. Pedimos una nueva, no te muevas…'
+    pedirReto()
   }
 }
 
@@ -98,7 +147,7 @@ async function loadDetector(): Promise<boolean> {
     return true
   }
   catch {
-    error.value = 'No se pudo cargar el detector facial. Verifica los archivos de MediaPipe en public/mediapipe.'
+    error.value = 'No se pudo cargar el detector facial. Revisa tu conexión e inténtalo de nuevo.'
     return false
   }
   finally {
@@ -113,7 +162,8 @@ function stopScanning(): void {
   processingFrame = false
 }
 
-function resetCapture(): void {
+/** Arranca (o reinicia) cámara y detector. No pide el reto: eso lo hace el warmup. */
+async function startCapture(): Promise<void> {
   stopScanning()
   neutralImage = null
   neutralYaw = 0
@@ -122,16 +172,11 @@ function resetCapture(): void {
   matchedSince = 0
   previousCenter = null
   progress.value = 0
-  step.value = 'neutral'
-  message.value = 'Coloca tu rostro dentro del marco.'
-  error.value = null
   capturing.value = false
-}
+  error.value = null
+  step.value = props.challenge && !expired.value ? 'neutral' : 'warmup'
+  message.value = 'Preparando la cámara…'
 
-async function startCapture(): Promise<void> {
-  resetCapture()
-  updateRemaining()
-  if (!props.challenge || expired.value) return
   const version = scanVersion
   if (!await loadDetector() || disposed || version !== scanVersion) return
   const started = await camera.start(videoEl.value)
@@ -139,8 +184,23 @@ async function startCapture(): Promise<void> {
     camera.stop()
     return
   }
-  message.value = 'Buscando un rostro…'
+  message.value = 'Coloca tu rostro dentro del marco.'
   scanInterval = setInterval(() => { void analyzeFrame(version) }, 180)
+}
+
+/** Llega el reto: ya hay cámara y detector, así que solo empiezan las fotos. */
+function comenzarFotos(): void {
+  neutralImage = null
+  neutralYaw = 0
+  neutralNoseY = 0
+  stableSince = 0
+  matchedSince = 0
+  previousCenter = null
+  progress.value = 0
+  error.value = null
+  step.value = 'neutral'
+  message.value = 'Mantén la mirada al frente un momento.'
+  if (!scanInterval) void startCapture()
 }
 
 function geometry(points: NormalizedLandmark[]) {
@@ -167,21 +227,29 @@ function geometry(points: NormalizedLandmark[]) {
   }
 }
 
-function movementSatisfied(
+/**
+ * Devuelve 0..1: qué tan cerca está el movimiento de cumplirse.
+ * Antes era un sí/no y la barra se quedaba clavada en 0 hasta el último
+ * instante, así que el usuario no tenía forma de saber si iba bien o si estaba
+ * girando al lado equivocado. Los umbrales no cambian: 1 significa lo mismo
+ * que antes significaba `true`.
+ */
+function movementProgress(
   face: ReturnType<typeof geometry>,
   scores: Record<string, number>
-): boolean {
+): number {
   const name = action.value
   const deltaYaw = face.yaw - neutralYaw
-  if (name.includes('IMAGE_LEFT')) return deltaYaw < -0.17
-  if (name.includes('IMAGE_RIGHT')) return deltaYaw > 0.17
-  if (name.includes('LEFT')) return deltaYaw < -0.17
-  if (name.includes('RIGHT')) return deltaYaw > 0.17
-  if (name.includes('BLINK')) return (scores.eyeBlinkLeft ?? 0) > 0.65 && (scores.eyeBlinkRight ?? 0) > 0.65
-  if (name.includes('SMILE')) return (scores.mouthSmileLeft ?? 0) > 0.55 && (scores.mouthSmileRight ?? 0) > 0.55
-  if (name.includes('UP')) return face.noseY - neutralNoseY < -0.06
-  if (name.includes('DOWN')) return face.noseY - neutralNoseY > 0.06
-  return false
+  const r = (valor: number, meta: number) => Math.max(0, Math.min(1, valor / meta))
+  if (name.includes('IMAGE_LEFT')) return r(-deltaYaw, YAW_TARGET)
+  if (name.includes('IMAGE_RIGHT')) return r(deltaYaw, YAW_TARGET)
+  if (name.includes('LEFT')) return r(-deltaYaw, YAW_TARGET)
+  if (name.includes('RIGHT')) return r(deltaYaw, YAW_TARGET)
+  if (name.includes('BLINK')) return r(Math.min(scores.eyeBlinkLeft ?? 0, scores.eyeBlinkRight ?? 0), 0.65)
+  if (name.includes('SMILE')) return r(Math.min(scores.mouthSmileLeft ?? 0, scores.mouthSmileRight ?? 0), 0.55)
+  if (name.includes('UP')) return r(neutralNoseY - face.noseY, 0.06)
+  if (name.includes('DOWN')) return r(face.noseY - neutralNoseY, 0.06)
+  return 0
 }
 
 async function shoot(version: number): Promise<Blob | null> {
@@ -219,10 +287,16 @@ async function analyzeFrame(version: number): Promise<void> {
     }
 
     const face = geometry(result.faceLandmarks[0]!)
-    const framed = Math.abs(face.center.x - 0.5) < 0.16
-      && Math.abs(face.center.y - 0.5) < 0.18
-      && face.width > 0.22 && face.width < 0.75
-      && face.height > 0.25 && face.height < 0.86
+
+    // Al girar, la cabeza se corre del centro y el recuadro del rostro se
+    // angosta (se ve de perfil). Con la tolerancia del paso 1 el encuadre
+    // fallaba a media vuelta, la barra se reiniciaba y aparecía "Centra tu
+    // rostro" justo cuando el usuario estaba haciendo lo correcto.
+    const girando = step.value === 'challenge'
+    const framed = Math.abs(face.center.x - 0.5) < (girando ? 0.24 : 0.16)
+      && Math.abs(face.center.y - 0.5) < (girando ? 0.24 : 0.18)
+      && face.width > (girando ? 0.17 : 0.22) && face.width < 0.80
+      && face.height > (girando ? 0.22 : 0.25) && face.height < 0.90
 
     if (!framed) {
       progress.value = 0
@@ -234,6 +308,24 @@ async function analyzeFrame(version: number): Promise<void> {
     }
 
     const now = performance.now()
+
+    // Fase 0: encuadrar ANTES de que exista reto. Aquí no corre ningún reloj.
+    if (step.value === 'warmup') {
+      const steady = !previousCenter || Math.hypot(
+        face.center.x - previousCenter.x,
+        face.center.y - previousCenter.y
+      ) < 0.03
+      previousCenter = face.center
+      if (!steady) stableSince = 0
+      if (!stableSince) stableSince = now
+      progress.value = Math.min(100, Math.round((now - stableSince) / WARMUP_HOLD_MS * 100))
+      message.value = 'Rostro detectado. Preparando la prueba…'
+      if (progress.value < 100) return
+      message.value = 'Todo listo. Pidiendo la prueba de vida…'
+      pedirReto()
+      return
+    }
+
     if (step.value === 'neutral') {
       const steady = !previousCenter || (Math.hypot(
         face.center.x - previousCenter.x,
@@ -253,22 +345,38 @@ async function analyzeFrame(version: number): Promise<void> {
       matchedSince = 0
       progress.value = 0
       step.value = 'challenge'
-      message.value = props.challenge?.instruction || hint.value.text
+      message.value = textoMovimiento.value
       return
     }
 
     if (step.value === 'challenge') {
       const scores = Object.fromEntries((result.faceBlendshapes[0]?.categories ?? [])
         .map(item => [item.categoryName, item.score]))
-      const matched = movementSatisfied(face, scores)
+      const avance = movementProgress(face, scores)
+      // Histéresis: ya alcanzado el giro, basta con sostener el 85 %.
+      const matched = avance >= (matchedSince ? YAW_HOLD_TOLERANCE : 1)
       if (!matched) matchedSince = 0
       if (!matchedSince && matched) matchedSince = now
       const holdTime = action.value.includes('BLINK') ? 180 : CHALLENGE_HOLD_MS
-      progress.value = matched ? Math.min(100, Math.round((now - matchedSince) / holdTime * 100)) : 0
-      message.value = matched ? 'Movimiento detectado. Mantén la posición.' : (props.challenge?.instruction || hint.value.text)
+      // Sin movimiento suficiente la barra muestra cuánto falta (tope 90 %),
+      // para que se note si el giro va en la dirección correcta.
+      progress.value = matched
+        ? Math.min(100, Math.round((now - matchedSince) / holdTime * 100))
+        : Math.round(avance * 90)
+      message.value = matched
+        ? 'Movimiento detectado. Mantén la posición.'
+        : avance > 0.3
+          ? 'Vas bien, sigue girando despacio…'
+          : textoMovimiento.value
       if (progress.value < 100 || !neutralImage) return
       const blob = await shoot(version)
       if (!blob) return
+
+      // No se gasta un viaje al servidor con un reto ya vencido: lo rechazaría
+      // y el usuario perdería las dos fotos que acaba de hacer bien.
+      updateRemaining()
+      if (expired.value) return
+
       const capturedNeutral = neutralImage
       step.value = 'sending'
       progress.value = 100
@@ -294,17 +402,18 @@ function cancel(): void {
 }
 
 watch(() => props.challenge?.id, (id, previousId) => {
-  if (id && id !== previousId && !disposed) {
-    fallbackExpiryMs = Date.now() + (props.challenge?.expiresInSeconds ?? 60) * 1000
-    void startCapture()
-  }
+  if (!id || id === previousId || disposed) return
+  retoPedido = false
+  fallbackExpiryMs = Date.now() + (props.challenge?.expiresInSeconds ?? 60) * 1000
+  updateRemaining()
+  comenzarFotos()
 })
 
 onMounted(() => {
   fallbackExpiryMs = Date.now() + (props.challenge?.expiresInSeconds ?? 60) * 1000
   updateRemaining()
   expiryInterval = setInterval(updateRemaining, 300)
-  if (props.challenge) void startCapture()
+  void startCapture()
 })
 
 onBeforeUnmount(() => {
@@ -320,14 +429,21 @@ onBeforeUnmount(() => {
 <template>
   <div class="face">
     <div class="face__instruction">
-      <v-icon :icon="step === 'neutral' ? 'mdi-face-recognition' : 'mdi-shield-check-outline'" color="accent" />
+      <v-icon :icon="step === 'challenge' ? 'mdi-shield-check-outline' : 'mdi-face-recognition'" color="accent" />
       <span class="text-body-2">
-        <strong>{{ step === 'neutral' ? 'Paso 1 de 2' : 'Paso 2 de 2' }}:</strong>
+        <strong v-if="step === 'warmup'">Preparando:</strong>
+        <strong v-else>{{ step === 'neutral' ? 'Paso 1 de 2' : 'Paso 2 de 2' }}:</strong>
         {{ message }}
       </span>
       <v-spacer />
-      <v-chip v-if="challenge" size="small" variant="tonal" :color="expired ? 'error' : 'primary'">
-        {{ expired ? 'Expirado' : `${remaining}s` }}
+      <v-chip v-if="challenge && !expired" size="small" variant="tonal" color="primary">
+        {{ remaining }}s
+      </v-chip>
+      <v-chip v-else-if="challenge" size="small" variant="tonal" color="error">
+        Expirado
+      </v-chip>
+      <v-chip v-else size="small" variant="tonal" color="accent">
+        Sin prisa
       </v-chip>
     </div>
 
@@ -344,16 +460,15 @@ onBeforeUnmount(() => {
         v-if="step === 'challenge' && !expired"
         class="face__hint-icon"
         :icon="hint.icon"
-        size="52"
+        size="64"
         color="accent"
       />
-      <div v-if="!camera.isActive.value || loadingModel || expired" class="face__overlay">
+      <div v-if="!camera.isActive.value || loadingModel" class="face__overlay">
         <v-progress-circular v-if="loadingModel || camera.isStarting.value || busy" indeterminate color="primary" />
-        <template v-else-if="!expired && step !== 'sending'">
+        <template v-else-if="step !== 'sending'">
           <p class="text-body-2 mb-3">{{ camera.error.value?.message || 'Activa tu cámara para continuar.' }}</p>
           <v-btn color="primary" prepend-icon="mdi-camera" @click="startCapture">Activar cámara</v-btn>
         </template>
-        <span v-else-if="expired" class="text-body-2">Reto expirado</span>
         <span v-else class="text-body-2">Validando tu identidad…</span>
       </div>
     </div>
@@ -361,7 +476,9 @@ onBeforeUnmount(() => {
     <div class="face__progress">
       <v-progress-linear :model-value="progress" color="accent" height="8" rounded />
       <span class="text-caption text-medium-emphasis">
-        {{ step === 'sending' ? 'Enviando captura' : `Detección: ${progress}%` }}
+        <template v-if="step === 'sending'">Enviando captura</template>
+        <template v-else-if="step === 'challenge'">Giro: {{ progress }}% — si no sube, estás girando al otro lado</template>
+        <template v-else>Detección: {{ progress }}%</template>
       </span>
     </div>
 
@@ -369,7 +486,7 @@ onBeforeUnmount(() => {
     <div class="face__actions">
       <v-btn variant="text" :disabled="busy" @click="cancel">Cancelar</v-btn>
       <v-spacer />
-      <v-btn v-if="expired" color="primary" prepend-icon="mdi-refresh" :loading="busy" @click="emit('request-challenge')">
+      <v-btn v-if="expired" color="primary" prepend-icon="mdi-refresh" :loading="busy" @click="pedirReto(true)">
         Nuevo reto
       </v-btn>
       <v-btn v-else-if="step !== 'sending'" variant="tonal" prepend-icon="mdi-refresh" :disabled="busy || loadingModel" @click="startCapture">
@@ -389,7 +506,16 @@ onBeforeUnmount(() => {
 .face__video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
 .face__oval { position: absolute; top: 12%; left: 20%; width: 60%; height: 70%; border: 3px dashed rgb(248 250 252 / 70%); border-radius: 50%; box-shadow: 0 0 0 9999px rgb(15 23 42 / 45%); pointer-events: none; transition: border-color 150ms ease; }
 .face__oval--ready { border-color: var(--nt-accent); border-style: solid; }
-.face__hint-icon { position: absolute; top: 8%; left: calc(50% - 26px); filter: drop-shadow(0 2px 6px rgb(0 0 0 / 70%)); }
+.face__hint-icon { position: absolute; top: 6%; left: calc(50% - 32px); filter: drop-shadow(0 2px 6px rgb(0 0 0 / 70%)); animation: hint-pulse 1.1s ease-in-out infinite; }
+
+/* La flecha late para que no pase desapercibida sobre el video. */
+@keyframes hint-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(1.14); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .face__hint-icon { animation: none; }
+}
 .face__overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; padding: 16px; text-align: center; background: rgb(15 23 42 / 70%); }
 .face__progress { display: flex; flex-direction: column; gap: 6px; }
 .face__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
