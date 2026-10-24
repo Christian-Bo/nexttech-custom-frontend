@@ -9,6 +9,12 @@ const auth = useAuthStore()
 const cart = useCartStore()
 const snackbar = useSnackbar()
 const route = useRoute()
+const landingAuthOpen = useState<boolean>('nt-landing-auth-open', () => false)
+const landingAuthMode = useState<'login' | 'register'>('nt-landing-auth-mode', () => 'login')
+function openLandingAuth(mode: 'login' | 'register') {
+  landingAuthMode.value = mode
+  landingAuthOpen.value = true
+}
 const { smAndDown } = useDisplay()
 const useMocks = !!useRuntimeConfig().public.useMocks
 
@@ -144,10 +150,11 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
         <!-- Acceso directo: el visitante no debe abrir el menú para iniciar sesión en móvil. -->
         <v-btn
           v-if="!auth.isAuthenticated && smAndDown"
-          to="/login"
+          :to="route.path === '/' ? undefined : '/login'"
           variant="text"
           size="small"
           class="bar__login text-none"
+          @click="() => { if (route.path === '/') openLandingAuth('login') }"
         >
           Ingresar
         </v-btn>
@@ -229,14 +236,16 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
             </template>
             <template v-else>
               <v-list-item
-                to="/login"
+                :to="route.path === '/' ? undefined : '/login'"
                 prepend-icon="mdi-login"
                 title="Ingresar"
+                @click="() => { if (route.path === '/') openLandingAuth('login') }"
               />
               <v-list-item
-                to="/registro"
+                :to="route.path === '/' ? undefined : '/registro'"
                 prepend-icon="mdi-account-plus-outline"
                 title="Crear cuenta"
+                @click="() => { if (route.path === '/') openLandingAuth('register') }"
               />
             </template>
           </v-list>
@@ -244,17 +253,19 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
 
         <template v-if="!auth.isAuthenticated && !smAndDown">
           <v-btn
-            to="/login"
+            :to="route.path === '/' ? undefined : '/login'"
             variant="text"
             class="text-none ml-1"
+            @click="() => { if (route.path === '/') openLandingAuth('login') }"
           >
             Ingresar
           </v-btn>
           <v-btn
-            to="/registro"
+            :to="route.path === '/' ? undefined : '/registro'"
             color="primary"
             variant="flat"
             class="text-none ml-1"
+            @click="() => { if (route.path === '/') openLandingAuth('register') }"
           >
             Crear cuenta
           </v-btn>
