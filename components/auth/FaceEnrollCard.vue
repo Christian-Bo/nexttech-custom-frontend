@@ -44,6 +44,17 @@ async function previewSegmentation(original: Blob): Promise<void> {
   }
 }
 
+/**
+ * Se entra a la cámara SIN pedir el reto todavía: descargar MediaPipe y
+ * encender la cámara toma varios segundos y antes eso se comía el minuto que
+ * dura el reto. El propio componente lo pide cuando ya tiene el rostro
+ * encuadrado, así el usuario estrena el reloj con todo listo.
+ */
+function comenzar(): void {
+  error.value = null
+  step.value = 'capture'
+}
+
 /** keepError: al reintentar tras un fallo se conserva el mensaje para que el usuario sepa qué pasó. */
 async function loadChallenge(keepError = false): Promise<void> {
   busy.value = true
@@ -71,9 +82,12 @@ async function submit(capture: FaceCaptureDto): Promise<void> {
   }
   catch (e) {
     const status = isApiError(e) ? e.status : 0
+    const mensaje = isApiError(e) ? e.message : ''
     error.value = status === 422
-      ? 'No superaste la prueba de vida. Asegúrate de tener buena luz y de hacer el movimiento indicado.'
-      : isApiError(e) ? e.message : 'No se pudo registrar tu rostro.'
+      ? 'No superaste la prueba de vida. Busca mejor luz y haz el movimiento despacio, siguiendo la flecha de la pantalla.'
+      : /expir|caduc/i.test(mensaje)
+        ? 'La prueba caducó antes de llegar al servidor. Ya pedimos una nueva: sigue las indicaciones de la cámara.'
+        : mensaje || 'No se pudo registrar tu rostro.'
     if (status === 422 || status === 400) await loadChallenge(true)
   }
   finally {
@@ -113,13 +127,13 @@ async function submit(capture: FaceCaptureDto): Promise<void> {
       <ul class="text-body-2 text-medium-emphasis pl-5">
         <li>Busca un lugar con buena luz y quítate lentes oscuros o gorra.</li>
         <li>La cámara tomará las fotos automáticamente: una de frente y otra haciendo un movimiento.</li>
+        <li>Para el movimiento, <strong>sigue la flecha azul</strong> que aparece sobre tu cabeza y gira despacio.</li>
         <li>El servidor conserva las fotografías necesarias para la verificación facial.</li>
       </ul>
       <v-btn
         color="primary"
         prepend-icon="mdi-face-recognition"
-        :loading="busy"
-        @click="loadChallenge()"
+        @click="comenzar"
       >
         Comenzar
       </v-btn>

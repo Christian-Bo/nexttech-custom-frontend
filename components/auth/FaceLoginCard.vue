@@ -17,6 +17,18 @@ const challenge = ref<FaceChallengeDto | null>(null)
 const busy = ref(false)
 const error = ref<string | null>(null)
 
+/**
+ * Se entra a la cámara SIN pedir el reto: cargar MediaPipe y encender la cámara
+ * tarda varios segundos y antes eso consumía el minuto del reto. El componente
+ * lo pide solo cuando ya tiene el rostro encuadrado.
+ */
+function comenzar(): void {
+  if (!identifier.value.trim()) return
+  error.value = null
+  challenge.value = null
+  step.value = 'capture'
+}
+
 /** keepError: al reintentar tras un fallo se conserva el mensaje para que el usuario sepa qué pasó. */
 async function loadChallenge(keepError = false): Promise<void> {
   busy.value = true
@@ -45,9 +57,12 @@ async function submit(capture: FaceCaptureDto): Promise<void> {
   catch (e) {
     const status = isApiError(e) ? e.status : 0
     // Seguridad: nunca distinguir "usuario no existe" de "rostro no coincide".
+    const mensaje = isApiError(e) ? e.message : ''
     error.value = status === 401
       ? 'No pudimos verificar tu identidad. Revisa que ya registraste tu rostro en Mi cuenta (entrando con tu contraseña) e inténtalo con buena luz.'
-      : isApiError(e) ? e.message : 'No se pudo completar el ingreso facial.'
+      : /expir|caduc/i.test(mensaje)
+        ? 'La prueba caducó antes de llegar al servidor. Ya pedimos una nueva: sigue las indicaciones de la cámara.'
+        : mensaje || 'No se pudo completar el ingreso facial.'
     // Cada intento necesita un reto nuevo.
     if (status !== 429) await loadChallenge(true)
   }
@@ -82,7 +97,7 @@ function cancel(): void {
     <form
       v-if="step === 'identifier'"
       class="d-flex flex-column ga-3"
-      @submit.prevent="loadChallenge()"
+      @submit.prevent="comenzar"
     >
       <v-text-field
         v-model="identifier"
