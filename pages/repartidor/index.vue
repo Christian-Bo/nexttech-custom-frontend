@@ -163,4 +163,14 @@ onMounted(load)
   font-size: 0.75rem;
   color: var(--nt-text-muted);
 }
+
+@media (max-width: 600px) {
+  .kpis { gap: 6px; }
+  .kpi { padding: 9px 4px; min-width: 0; }
+  .kpi__value { font-size: 1.24rem; }
+  .kpi__label { font-size: .69rem; }
+  :deep(.v-btn-toggle) { flex: 1; display: flex; }
+  :deep(.v-btn-toggle .v-btn) { flex: 1; min-width: 0; font-size: .78rem; }
+}
+
 </style>

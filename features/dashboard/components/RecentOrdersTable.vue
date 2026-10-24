@@ -59,6 +59,14 @@ defineProps<{
         </tr>
       </TransitionGroup>
     </v-table>
+    <div class="recent-cards" aria-label="Pedidos recientes">
+      <v-card v-for="o in orders" :key="o.idOrden" border rounded="lg" variant="tonal" class="pa-3 mb-2" :class="{ 'row--new': highlight?.has(o.idOrden) }">
+        <div class="d-flex align-center justify-space-between ga-2 mb-1"><strong class="text-body-2">#{{ o.codigoOrden }}</strong><StatusChip :status="o.estado" size="x-small" /></div>
+        <div class="text-body-2">{{ o.nickname }}</div>
+        <div class="text-caption text-medium-emphasis">{{ o.producto }}</div>
+        <div class="d-flex justify-space-between align-center mt-2 text-body-2"><span>{{ timeAgo(o.fechaCreacion) }}</span><strong>{{ formatQ(o.total) }}</strong></div>
+      </v-card>
+    </div>
   </div>
 </template>
 
@@ -92,4 +100,11 @@ defineProps<{
   0% { background: rgb(6 182 212 / 18%); }
   100% { background: transparent; }
 }
+
+.recent-cards { display: none; }
+@media (max-width: 760px) {
+  .table-wrap > :deep(.v-table) { display: none; }
+  .recent-cards { display: block; padding: 6px; }
+}
+
 </style>

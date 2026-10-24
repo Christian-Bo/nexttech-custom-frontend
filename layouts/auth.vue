@@ -105,4 +105,12 @@
     align-items: center;
   }
 }
+
+@media (max-width: 600px) {
+  .auth { min-height: 100dvh; }
+  .auth__brand { padding: 12px 16px; }
+  .auth__panel { padding: 16px 16px 28px; }
+  .auth__content { max-width: 420px; }
+}
+
 </style>

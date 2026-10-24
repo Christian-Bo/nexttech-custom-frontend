@@ -201,4 +201,15 @@ onMounted(() => void load())
     text-align: left;
   }
 }
+
+@media (max-width: 600px) {
+  .list { gap: 8px; }
+  .order { gap: 6px 10px; padding: 12px; grid-template-columns: minmax(0, 1fr) auto; }
+  .order__main { min-width: 0; grid-column: 1; }
+  .order__code { font-size: 0.89rem; overflow-wrap: anywhere; }
+  .order > :deep(.v-chip) { grid-column: 2; grid-row: 1; justify-self: end; }
+  .order__total { grid-column: 1; grid-row: 2; font-size: 0.91rem; }
+  .order > :deep(.v-icon) { grid-column: 2; grid-row: 2; justify-self: end; }
+}
+
 </style>

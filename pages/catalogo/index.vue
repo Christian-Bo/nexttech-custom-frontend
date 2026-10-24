@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import type { ProductSummary } from '~/features/catalog/types/catalog'
+import type { ProductDetail, ProductSummary, ProductVariant } from '~/features/catalog/types/catalog'
 import { categoryIcon, useShopCatalog } from '~/features/catalog/services/catalogService'
 import { isApiError } from '~/services/api'
 import type { ApiError } from '~/types/api'
@@ -24,6 +24,93 @@ const loading = ref(true)
 const error = ref<ApiError | null>(null)
 const search = ref('')
 const category = ref<string>('Todos')
+
+// El listado solo contiene datos resumidos. Consultamos el detalle bajo demanda
+// para conservar la selección correcta de variante y mostrar todos sus atributos.
+const detailCache = new Map<string, ProductDetail>()
+const detailRequests = new Map<string, Promise<ProductDetail>>()
+const infoDialog = ref(false)
+const infoLoading = ref(false)
+const infoError = ref<ApiError | null>(null)
+const infoCode = ref('')
+const infoProduct = ref<ProductDetail | null>(null)
+const infoVariantId = ref<number | null>(null)
+const openingCode = ref<string | null>(null)
+const snackbar = useSnackbar()
+
+const infoVariant = computed<ProductVariant | null>(() =>
+  infoProduct.value?.variantes.find(v => v.idVariante === infoVariantId.value) ?? null
+)
+
+async function getDetail(codigo: string): Promise<ProductDetail> {
+  const cached = detailCache.get(codigo)
+  if (cached) return cached
+  const pending = detailRequests.get(codigo)
+  if (pending) return pending
+  const request = catalog.getProduct(codigo)
+  detailRequests.set(codigo, request)
+  try {
+    const result = await request
+    detailCache.set(codigo, result)
+    return result
+  }
+  finally {
+    detailRequests.delete(codigo)
+  }
+}
+
+async function showProductInfo(codigo: string): Promise<void> {
+  infoCode.value = codigo
+  infoProduct.value = null
+  infoVariantId.value = null
+  infoError.value = null
+  infoLoading.value = true
+  infoDialog.value = true
+  try {
+    const detail = await getDetail(codigo)
+    if (infoCode.value !== codigo || !infoDialog.value) return
+    infoProduct.value = detail
+    infoVariantId.value = detail.variantes.find(v => v.plantillas?.length)?.idVariante
+      ?? detail.variantes[0]?.idVariante
+      ?? null
+  }
+  catch (e) {
+    if (infoCode.value === codigo && infoDialog.value) {
+      infoError.value = isApiError(e) ? e : { status: 0, code: 'UNKNOWN', message: 'No se pudo consultar la información.' }
+    }
+  }
+  finally {
+    if (infoCode.value === codigo) infoLoading.value = false
+  }
+}
+
+async function startCustomization(codigo: string, preferredVariant?: ProductVariant | null): Promise<void> {
+  if (openingCode.value) return
+  openingCode.value = codigo
+  try {
+    const detail = await getDetail(codigo)
+    if (!detail.permitePersonalizacion) {
+      await navigateTo(`/catalogo/${encodeURIComponent(codigo)}`)
+      return
+    }
+    const selected = preferredVariant?.codigoVariante
+      ? detail.variantes.find(v => v.idVariante === preferredVariant.idVariante && v.plantillas?.length > 0)
+      : null
+    const variant = selected
+      ?? detail.variantes.find(v => v.plantillas?.length && v.codigoVariante)
+    if (!variant?.codigoVariante) {
+      snackbar.warning('Este producto todavía no tiene un modelo disponible para personalizar.')
+      return
+    }
+    await navigateTo({ path: '/personalizar', query: { producto: variant.codigoVariante } })
+  }
+  catch (e) {
+    snackbar.error(isApiError(e) ? e : 'No se pudo abrir el personalizador. Intenta nuevamente.')
+  }
+  finally {
+    openingCode.value = null
+  }
+}
 
 const categories = computed(() => ['Todos', ...new Set(products.value.map(p => p.categoria))])
 
@@ -174,7 +261,6 @@ onMounted(load)
       <v-card
         v-for="p in filtered"
         :key="p.codigoProducto"
-        :to="`/catalogo/${encodeURIComponent(p.codigoProducto)}`"
         border
         variant="flat"
         rounded="lg"
@@ -203,6 +289,18 @@ onMounted(load)
           <v-card-title class="px-0 text-wrap">
             {{ p.nombre }}
           </v-card-title>
+          <v-btn
+            variant="text"
+            color="accent"
+            size="small"
+            density="compact"
+            prepend-icon="mdi-information-outline"
+            class="product__info-link text-none"
+            :aria-label="`Información y características de ${p.nombre}`"
+            @click="showProductInfo(p.codigoProducto)"
+          >
+            Información y características
+          </v-btn>
         </v-card-item>
         <v-card-text class="product__desc">
           {{ p.descripcion }}
@@ -218,16 +316,128 @@ onMounted(load)
           </div>
           <v-spacer />
           <v-btn
+            v-if="p.permitePersonalizacion"
             color="primary"
             variant="flat"
-            class="text-none"
+            class="product__cta text-none"
             append-icon="mdi-arrow-right"
+            :loading="openingCode === p.codigoProducto"
+            :disabled="openingCode !== null && openingCode !== p.codigoProducto"
+            @click="startCustomization(p.codigoProducto)"
           >
-            Ver
+            Personalizar
+          </v-btn>
+          <v-btn
+            v-else
+            color="primary"
+            variant="flat"
+            class="product__cta text-none"
+            append-icon="mdi-arrow-right"
+            :to="`/catalogo/${encodeURIComponent(p.codigoProducto)}`"
+          >
+            Ver opciones
           </v-btn>
         </v-card-actions>
       </v-card>
     </div>
+
+    <!-- Las características se consultan solo al solicitarlas: no se descargan
+         todos los detalles e imágenes en el primer render del catálogo. -->
+    <v-dialog v-model="infoDialog" max-width="520" scrollable>
+      <v-card rounded="lg">
+        <v-card-title class="d-flex align-center ga-2 product-info__title">
+          <v-icon icon="mdi-information-outline" color="accent" />
+          <span class="text-truncate">Información y características</span>
+          <v-spacer />
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            size="small"
+            aria-label="Cerrar información"
+            @click="infoDialog = false"
+          />
+        </v-card-title>
+        <v-card-text>
+          <v-skeleton-loader v-if="infoLoading" type="article, list-item-two-line" />
+          <StateError
+            v-else-if="infoError"
+            :error="infoError"
+            @retry="showProductInfo(infoCode)"
+          />
+          <template v-else-if="infoProduct">
+            <h2 class="text-h6 font-weight-bold mb-1">{{ infoProduct.nombre }}</h2>
+            <p v-if="infoProduct.descripcion" class="text-body-2 text-medium-emphasis mb-4">
+              {{ infoProduct.descripcion }}
+            </p>
+
+            <template v-if="infoProduct.variantes.length > 1">
+              <h3 class="text-subtitle-2 font-weight-bold mb-2">Modelo</h3>
+              <v-select
+                v-model="infoVariantId"
+                :items="infoProduct.variantes.filter(v => !infoProduct?.permitePersonalizacion || v.plantillas?.length > 0)"
+                item-title="nombre"
+                item-value="idVariante"
+                density="compact"
+                variant="outlined"
+                hide-details
+                class="mb-4"
+                aria-label="Seleccionar modelo"
+              />
+            </template>
+            <p v-if="infoVariant" class="text-h6 font-weight-bold mb-3">{{ formatQ(infoVariant.precioActual) }}</p>
+
+            <template v-if="infoVariant?.atributos.length || infoProduct.medidas">
+              <h3 class="text-subtitle-2 font-weight-bold mb-2">Características</h3>
+              <dl class="product-info__attrs mb-4">
+                <template v-for="attr in infoVariant?.atributos ?? []" :key="attr.atributo">
+                  <dt>{{ attr.atributo }}</dt>
+                  <dd>{{ attr.valor }}</dd>
+                </template>
+                <template v-if="infoProduct.medidas">
+                  <dt>Diámetro del llavero</dt>
+                  <dd>{{ infoProduct.medidas.diametroLlaveroPulgadas }}&quot; ({{ infoProduct.medidas.diametroLlaveroMm }} mm)</dd>
+                </template>
+              </dl>
+            </template>
+            <h3 class="text-subtitle-2 font-weight-bold mb-2">Compra y entrega</h3>
+            <p class="text-body-2 mb-1"><v-icon icon="mdi-map-marker-radius-outline" size="small" /> Entrega dentro del campus</p>
+            <p class="text-body-2 mb-1"><v-icon icon="mdi-cash" size="small" /> Pago en efectivo al recibir</p>
+            <p class="text-body-2"><v-icon icon="mdi-timer-sand" size="small" /> Elaboración en minutos y seguimiento en tiempo real</p>
+          </template>
+        </v-card-text>
+        <v-card-actions class="px-4 pb-4 flex-wrap ga-2">
+          <v-btn
+            v-if="infoProduct"
+            variant="text"
+            class="text-none"
+            :to="`/catalogo/${encodeURIComponent(infoProduct.codigoProducto)}`"
+          >
+            Ficha completa
+          </v-btn>
+          <v-spacer />
+          <v-btn
+            v-if="infoProduct?.permitePersonalizacion"
+            color="primary"
+            variant="flat"
+            class="text-none"
+            prepend-icon="mdi-palette-outline"
+            :disabled="!infoVariant"
+            :loading="openingCode === infoProduct.codigoProducto"
+            @click="startCustomization(infoProduct.codigoProducto, infoVariant)"
+          >
+            Personalizar
+          </v-btn>
+          <v-btn
+            v-else
+            variant="tonal"
+            class="text-none"
+            @click="infoDialog = false"
+          >
+            Cerrar
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-container>
 </template>
 
@@ -319,4 +529,44 @@ onMounted(load)
   overflow: hidden;
   color: var(--nt-text-secondary);
 }
+
+/* Acciones compactas sin esconder el destino principal del producto. */
+.product__info-link { padding-inline: 0 !important; }
+.product__info-link :deep(.v-btn__content) { white-space: normal; }
+.product-info__title { min-width: 0; }
+.product-info__attrs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 14px; }
+.product-info__attrs dt { color: var(--nt-text-secondary); }
+.product-info__attrs dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+
+/* Catálogo con menos altura por ficha y filtros accesibles con una mano. */
+@media (max-width: 600px) {
+  .v-container { padding-top: 12px !important; }
+  header { margin-bottom: 12px !important; }
+  header h1 { font-size: 1.65rem !important; }
+  header p { font-size: 0.88rem; line-height: 1.35; }
+  .filters { align-items: stretch; gap: 8px; margin-bottom: 16px !important; }
+  .filters__search { flex-basis: 100%; max-width: none; }
+  .filters :deep(.v-chip-group) { max-width: 100%; overflow-x: auto; }
+  .grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .product { display: grid; grid-template-columns: minmax(88px, 27%) minmax(0, 1fr); grid-template-rows: auto auto; }
+  .product__media { grid-row: 1 / 3; height: auto !important; min-height: 126px; }
+  .product__badge { display: none; }
+  .product :deep(.v-card-item) { min-width: 0; }
+  .product :deep(.v-card-actions) { grid-column: 2; align-self: end; }
+  .product :deep(.v-card-actions .v-btn) { min-height: 40px; }
+  .product__media { height: 100px; }
+  .product__media > .v-icon { font-size: 38px !important; }
+  .product__badge { top: 5px; right: 5px; }
+  .product :deep(.v-card-item) { padding: 10px 10px 2px; }
+  .product :deep(.v-card-title) { font-size: 0.94rem; line-height: 1.25; }
+  .product__desc { display: none; }
+  .product :deep(.v-card-actions) { padding: 8px 10px 12px !important; gap: 4px; }
+  .product :deep(.v-card-actions .v-btn) { min-width: 0; padding-inline: 9px; font-size: 0.78rem; }
+  .product__info-link { font-size: 0.7rem !important; max-width: 100%; min-width: 0; margin-top: 4px; justify-content: flex-start; }
+  .product__info-link :deep(.v-btn__content) { white-space: normal; text-align: left; line-height: 1.15; }
+  .welcome { padding: 16px; gap: 8px; margin-bottom: 16px !important; }
+  .welcome__confetti { display: none; }
+}
+@media (max-width: 360px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+
 </style>

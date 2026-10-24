@@ -26,6 +26,8 @@ let height = 0
 let frame = 0
 let running = false
 let reduceMotion = false
+let lastDraw = 0
+let frameIntervalMs = 0
 
 function particleCount(): number {
   const base = Math.round((width * height) / 14_000)
@@ -47,7 +49,7 @@ function createParticle(): Particle {
 function resize(): void {
   const el = canvas.value
   if (!el) return
-  const dpr = Math.min(window.devicePixelRatio || 1, 2)
+  const dpr = Math.min(window.devicePixelRatio || 1, window.innerWidth < 761 ? 1.5 : 2)
   width = window.innerWidth
   height = window.innerHeight
   el.width = Math.round(width * dpr)
@@ -104,15 +106,19 @@ function draw(move = true): void {
   }
 }
 
-function loop(): void {
+function loop(timestamp: number): void {
   if (!running) return
-  draw()
+  if (!frameIntervalMs || timestamp - lastDraw >= frameIntervalMs) {
+    draw()
+    lastDraw = timestamp
+  }
   frame = requestAnimationFrame(loop)
 }
 
 function start(): void {
   if (running || reduceMotion) return
   running = true
+  lastDraw = 0
   frame = requestAnimationFrame(loop)
 }
 
@@ -127,6 +133,7 @@ function onVisibility(): void {
 }
 
 onMounted(() => {
+  frameIntervalMs = window.matchMedia('(max-width: 760px)').matches ? 1000 / 30 : 0
   reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   resize()
   if (reduceMotion) draw(false)

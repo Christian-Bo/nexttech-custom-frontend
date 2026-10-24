@@ -5,7 +5,8 @@ import type { CameraFacing } from '~/composables/useCamera'
 
 const props = withDefaults(defineProps<{
   facing?: CameraFacing
-}>(), { facing: 'user' })
+  capturedText?: string
+}>(), { facing: 'user', capturedText: 'Fotografía capturada. Preparando el editor…' })
 
 const emit = defineEmits<{
   capture: [blob: Blob]
@@ -97,7 +98,7 @@ async function takeAutomaticPhoto(currentSession: number): Promise<void> {
       return
     }
     progress.value = 100
-    statusText.value = 'Fotografía capturada. Preparando el editor…'
+    statusText.value = props.capturedText
     emit('capture', blob)
   }
   catch (e) {

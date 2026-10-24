@@ -6,6 +6,7 @@ import { useProductEditor } from '../composables/useProductEditor'
 import { EDITOR_COLORS, STICKERS } from '../config/products'
 import EditorContextPanel from './EditorContextPanel.vue'
 import { ImageValidationError } from '~/utils/image'
+import { formatQ } from '~/utils/format'
 import { normalizeNfcCustomerUrl, validateNfcCustomerUrl } from '../services/nfcValidation'
 
 /**
@@ -43,6 +44,11 @@ const canvasB = ref<HTMLCanvasElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const displayWidth = ref(360)
 const imageDialog = ref(false)
+const nfcDialog = ref(false)
+const propertiesDialog = ref(false)
+const mobileToolsDialog = ref(false)
+const mobileStickerDialog = ref(false)
+const uploadPreview = ref<string | null>(null)
 const imageTab = ref<'upload' | 'camera'>('upload')
 const preview = ref<{ open: boolean, urls: Partial<Record<SideKey, string>> }>({ open: false, urls: {} })
 const finishing = ref(false)
@@ -62,19 +68,29 @@ let resizeObserver: ResizeObserver | null = null
 
 function measure(): number {
   const w = stageWrap.value?.clientWidth ?? 360
-  const maxByHeight = (window.innerHeight * 0.62) * props.template.width / props.template.height
-  return Math.max(240, Math.min(w - 16, 560, maxByHeight))
+  const isPhone = window.innerWidth <= 760
+  // En móvil reservamos espacio para las herramientas rápidas y el botón inferior.
+  // El lienzo sigue siendo interactivo: solo se reduce su tamaño visual, no la resolución exportada.
+  const maxByHeight = (window.innerHeight * (isPhone ? 0.31 : 0.62)) * props.template.width / props.template.height
+  return Math.max(isPhone ? 150 : 240, Math.min(w - 16, 560, maxByHeight))
 }
 
 // ---------- imágenes ----------
 
 async function handleImage(blob: Blob): Promise<void> {
+  if (editor.isBusy.value) return
   imageDialog.value = false
+  const localUrl = URL.createObjectURL(blob)
+  uploadPreview.value = localUrl
   try {
     await editor.addImage(blob)
   }
   catch (e) {
     snackbar.error(e instanceof ImageValidationError ? e.message : 'No se pudo agregar la imagen.')
+  }
+  finally {
+    if (uploadPreview.value === localUrl) uploadPreview.value = null
+    URL.revokeObjectURL(localUrl)
   }
 }
 
@@ -127,6 +143,22 @@ function addSticker(emoji: string): void {
   if (!editor.addSticker(emoji)) snackbar.warning(`Máximo ${MAX_STICKERS_PER_SIDE} stickers por lado.`)
 }
 
+function addMobileSticker(emoji: string): void {
+  addSticker(emoji)
+  mobileStickerDialog.value = false
+}
+
+async function removePhoto(): Promise<void> {
+  if (!editor.activeSideHasPhoto.value || editor.isBusy.value) return
+  const ok = await confirm({
+    title: '¿Eliminar solo esta foto?',
+    message: 'Se quitará la foto seleccionada o la última que agregaste en este lado. Se conservarán los textos, stickers y el fondo. Puedes deshacer el cambio.',
+    confirmText: 'Eliminar foto',
+    danger: true
+  })
+  if (ok && editor.removePhoto()) snackbar.success('Foto eliminada. Toca el círculo o Foto para agregar otra.')
+}
+
 async function clearSide(): Promise<void> {
   const ok = await confirm({
     title: `¿Vaciar ${props.template.zones.find(z => z.key === editor.activeSide.value)?.name}?`,
@@ -159,6 +191,8 @@ async function finish(): Promise<void> {
   if (urlError) {
     nfcError.value = urlError
     snackbar.warning(urlError)
+    // En móvil el NFC está en un diálogo para no ocupar toda la pantalla.
+    if (window.innerWidth <= 760) nfcDialog.value = true
     return
   }
   nfcError.value = ''
@@ -305,8 +339,35 @@ onBeforeUnmount(() => {
         >
           Vista previa
         </v-btn>
+        <v-btn class="customizer__desktop-finish" color="primary" prepend-icon="mdi-check" :loading="finishing || saving || editor.isBusy.value" :disabled="editor.isBusy.value" @click="finish">
+          {{ finishText ?? 'Listo' }}
+        </v-btn>
       </div>
     </header>
+
+    <!-- Acciones siempre visibles en teléfono. El círculo original sigue abriendo la foto. -->
+    <nav class="customizer__mobile-toolbar" aria-label="Herramientas rápidas de personalización">
+      <button type="button" class="customizer__quick-tool" :disabled="editor.isBusy.value" @click="imageDialog = true">
+        <v-icon icon="mdi-image-plus-outline" size="21" />
+        <span>Foto</span>
+      </button>
+      <button type="button" class="customizer__quick-tool" :disabled="editor.isBusy.value" @click="editor.addText()">
+        <v-icon icon="mdi-format-text" size="21" />
+        <span>Texto</span>
+      </button>
+      <button type="button" class="customizer__quick-tool" :disabled="editor.isBusy.value" @click="mobileStickerDialog = true">
+        <v-icon icon="mdi-sticker-emoji-outline" size="21" />
+        <span>Sticker</span>
+      </button>
+      <button type="button" class="customizer__quick-tool customizer__quick-tool--remove" :disabled="!editor.activeSideHasPhoto.value || editor.isBusy.value" @click="removePhoto">
+        <v-icon icon="mdi-image-remove-outline" size="21" />
+        <span>Quitar foto</span>
+      </button>
+      <button type="button" class="customizer__quick-tool" :class="{ 'customizer__quick-tool--pending': !nfcListo }" :aria-label="nfcListo ? 'Más herramientas' : 'Más herramientas, NFC pendiente'" @click="mobileToolsDialog = true">
+        <v-icon icon="mdi-dots-horizontal-circle-outline" size="21" />
+        <span>Más</span>
+      </button>
+    </nav>
 
     <div class="customizer__body">
       <!-- Herramientas -->
@@ -314,6 +375,9 @@ onBeforeUnmount(() => {
         class="customizer__tools"
         aria-label="Herramientas"
       >
+        <v-btn class="tool customizer__mobile-nfc text-none" variant="tonal" prepend-icon="mdi-nfc" :color="nfcListo ? 'success' : 'accent'" @click="nfcDialog = true">
+          {{ nfcListo ? 'NFC configurado' : 'Completar NFC' }}
+        </v-btn>
         <span class="tools__label">Agregar:</span>
         <v-btn
           class="tool"
@@ -384,6 +448,17 @@ onBeforeUnmount(() => {
           </v-card>
         </v-menu>
         <v-btn
+          v-if="editor.activeSideHasPhoto.value"
+          class="tool"
+          variant="tonal"
+          color="error"
+          prepend-icon="mdi-image-remove-outline"
+          :disabled="editor.isBusy.value"
+          @click="removePhoto"
+        >
+          Quitar foto
+        </v-btn>
+        <v-btn
           class="tool"
           variant="text"
           color="error"
@@ -391,6 +466,9 @@ onBeforeUnmount(() => {
           @click="clearSide"
         >
           Vaciar lado
+        </v-btn>
+        <v-btn class="tool customizer__mobile-properties text-none" variant="tonal" prepend-icon="mdi-tune-variant" @click="propertiesDialog = true">
+          Ajustar elemento
         </v-btn>
       </aside>
 
@@ -404,6 +482,10 @@ onBeforeUnmount(() => {
         @touchstart.passive="onTouchStart"
         @touchend.passive="onTouchEnd"
       >
+        <div v-if="uploadPreview" class="customizer__upload-preview" :style="{ width: `${displayWidth}px`, height: `${displayHeight}px`, borderRadius: outlineRadius }" role="status" aria-label="Preparando tu foto">
+          <img :src="uploadPreview" alt="Foto seleccionada, preparando diseño" :style="{ objectFit: template.shape === 'CIRCULAR' ? 'cover' : 'contain' }">
+          <span>Preparando tu foto…</span>
+        </div>
         <div
           class="flipper"
           :class="{ 'flipper--flipped': isFlipped }"
@@ -450,6 +532,9 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
+        <v-btn class="customizer__quick-photo text-none" color="primary" variant="tonal" prepend-icon="mdi-image-plus-outline" :loading="editor.isBusy.value" @click="imageDialog = true">
+          Subir foto
+        </v-btn>
         <v-btn-toggle
           v-if="editor.sideKeys.length > 1"
           :model-value="editor.activeSide.value"
@@ -501,9 +586,9 @@ onBeforeUnmount(() => {
         <EditorContextPanel :editor="editor" />
       </aside>
     </div>
-    <!-- El enlace NFC es obligatorio para agregar al carrito: tiene que verse como un paso, no como un dato suelto. -->
+    <!-- NFC permanece obligatorio mientras el backend desplegado no admita nfcUrl=null. -->
     <section
-      class="nfc"
+      class="nfc customizer__desktop-nfc"
       :class="{ 'nfc--listo': nfcListo }"
     >
       <div class="nfc__head">
@@ -554,7 +639,7 @@ onBeforeUnmount(() => {
       variant="flat"
       size="x-large"
       block
-      class="text-none mt-5"
+      class="text-none mt-5 customizer__desktop-bottom-finish"
       prepend-icon="mdi-cart-plus"
       :loading="finishing || saving"
       @click="finish"
@@ -564,6 +649,72 @@ onBeforeUnmount(() => {
     <p class="text-caption text-medium-emphasis text-center mt-2">
       Revisa tu diseño y tu enlace antes de continuar.
     </p>
+
+    <div class="customizer__mobile-finish" aria-label="Finalizar personalización">
+      <div class="customizer__mobile-total"><span>Tu diseño</span><strong>{{ template.price === undefined ? 'Personalizado' : formatQ(template.price) }}</strong></div>
+      <v-btn color="primary" class="text-none" prepend-icon="mdi-cart-plus" :loading="finishing || saving || editor.isBusy.value" :disabled="editor.isBusy.value" @click="finish">{{ finishText ?? 'Listo' }}</v-btn>
+    </div>
+
+    <!-- Herramientas secundarias en un panel corto, sin desplazar el editor. -->
+    <v-bottom-sheet v-model="mobileToolsDialog" inset>
+      <v-card rounded="lg" class="customizer__mobile-sheet">
+        <v-card-title class="d-flex align-center ga-2">
+          Herramientas
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" aria-label="Cerrar herramientas" @click="mobileToolsDialog = false" />
+        </v-card-title>
+        <v-card-text class="pt-0">
+          <div class="customizer__more-grid">
+            <v-btn class="text-none" variant="tonal" prepend-icon="mdi-nfc" :color="nfcListo ? 'success' : 'accent'" @click="mobileToolsDialog = false; nfcDialog = true">
+              {{ nfcListo ? 'NFC listo' : 'Configurar NFC' }}
+            </v-btn>
+            <v-btn class="text-none" variant="tonal" prepend-icon="mdi-tune-variant" :disabled="editor.selection.value.count === 0" @click="mobileToolsDialog = false; propertiesDialog = true">
+              Ajustar elemento
+            </v-btn>
+            <v-btn class="text-none" variant="tonal" :prepend-icon="editor.manualAdjust.value ? 'mdi-lock-open-variant-outline' : 'mdi-cursor-move'" :disabled="!editor.activeSideHasPhoto.value" @click="editor.setManualAdjust(!editor.manualAdjust.value); mobileToolsDialog = false">
+              {{ editor.manualAdjust.value ? 'Terminar ajuste' : 'Mover foto' }}
+            </v-btn>
+            <v-btn class="text-none" variant="text" color="error" prepend-icon="mdi-eraser" @click="mobileToolsDialog = false; clearSide()">
+              Vaciar lado
+            </v-btn>
+          </div>
+          <div class="text-caption font-weight-bold mt-4 mb-2">Color del fondo</div>
+          <div class="bg-swatches customizer__mobile-colors">
+            <button v-for="c in ['#FFFFFF', ...EDITOR_COLORS]" :key="c" type="button" class="bg-swatch" :style="{ background: c }" :aria-label="`Fondo ${c}`" @click="editor.setBackground(c); mobileToolsDialog = false" />
+          </div>
+        </v-card-text>
+      </v-card>
+    </v-bottom-sheet>
+
+    <v-bottom-sheet v-model="mobileStickerDialog" inset>
+      <v-card rounded="lg" class="customizer__mobile-sheet">
+        <v-card-title class="d-flex align-center ga-2">Agregar sticker <v-spacer /><v-btn icon="mdi-close" variant="text" aria-label="Cerrar stickers" @click="mobileStickerDialog = false" /></v-card-title>
+        <v-card-text class="pt-0">
+          <div class="stickers customizer__mobile-stickers">
+            <button v-for="s in STICKERS" :key="s" type="button" class="sticker" :aria-label="`Sticker ${s}`" @click="addMobileSticker(s)">{{ s }}</button>
+          </div>
+        </v-card-text>
+      </v-card>
+    </v-bottom-sheet>
+
+    <v-dialog v-model="nfcDialog" max-width="500" scrollable>
+      <v-card rounded="lg">
+        <v-card-title class="d-flex align-center ga-2"><v-icon icon="mdi-nfc" color="accent" /> Enlace NFC <v-spacer /><v-btn icon="mdi-close" variant="text" aria-label="Cerrar NFC" @click="nfcDialog = false" /></v-card-title>
+        <v-card-text>
+          <p class="text-body-2 mb-3">Para guardar tu personalización, ingresa el enlace HTTPS que abrirá el llavero.</p>
+          <v-text-field v-model="nfcUrl" label="Enlace NFC (obligatorio)" placeholder="www.google.com o https://youtube.com/..." :counter="2048" :error-messages="nfcError ? [nfcError] : []" variant="outlined" density="comfortable" @update:model-value="nfcError = ''" @blur="completarEnlace" />
+        </v-card-text>
+        <v-card-actions class="px-4 pb-4"><v-spacer /><v-btn color="primary" variant="flat" @click="nfcDialog = false">Volver al diseño</v-btn></v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="propertiesDialog" max-width="520" scrollable>
+      <v-card rounded="lg">
+        <v-card-title class="d-flex align-center ga-2">Ajustes del elemento <v-spacer /><v-btn icon="mdi-close" variant="text" aria-label="Cerrar ajustes" @click="propertiesDialog = false" /></v-card-title>
+        <v-card-text><EditorContextPanel :editor="editor" /></v-card-text>
+        <v-card-actions><v-spacer /><v-btn variant="tonal" @click="propertiesDialog = false">Cerrar</v-btn></v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- Diálogo: agregar imagen -->
     <v-dialog
@@ -923,6 +1074,14 @@ onBeforeUnmount(() => {
   background: repeating-conic-gradient(#334155 0% 25%, #1e293b 0% 50%) 50% / 20px 20px;
 }
 
+/* Herramientas rápidas: solo teléfono, nunca sustituyen las herramientas de escritorio. */
+.customizer__mobile-toolbar { display: none; }
+.customizer__mobile-sheet { max-height: min(78dvh, 540px); overflow-y: auto; }
+.customizer__more-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.customizer__more-grid :deep(.v-btn) { min-width: 0; justify-content: start; font-size: .78rem; }
+.customizer__mobile-colors { display: flex; flex-wrap: wrap; gap: 8px; }
+.customizer__mobile-stickers { grid-template-columns: repeat(4, 44px); justify-content: center; }
+
 /* ---------- Responsive ---------- */
 @media (max-width: 1100px) {
   .customizer__body {
@@ -957,5 +1116,45 @@ onBeforeUnmount(() => {
   .customizer__actions .v-btn:not(.v-btn--icon) {
     flex: 1 1 auto;
   }
+}
+/* UX móvil integrada con Fabric oficial: no interfiere con los gestos ni el ajuste manual. */
+.customizer__mobile-nfc, .customizer__mobile-properties, .customizer__mobile-finish, .customizer__quick-photo { display: none; }
+.customizer__stage { position: relative; }
+.customizer__upload-preview { position: absolute; z-index: 5; top: 22px; left: 50%; transform: translateX(-50%); display: grid; place-items: center; overflow: hidden; border: 1px solid var(--nt-border); background: var(--nt-surface); pointer-events: none; }
+.customizer__upload-preview img { max-width: 100%; max-height: 100%; width: 100%; height: 100%; }
+.customizer__upload-preview span { position: absolute; bottom: 6px; background: rgb(0 0 0 / 70%); color: white; font-size: .75rem; padding: 4px 8px; border-radius: 8px; }
+@media (max-width: 760px) {
+  .customizer { padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
+  .customizer__header { gap: 5px; flex-wrap: nowrap; }
+  .customizer__header > div:first-child { flex: 0 1 auto; }
+  .customizer__header .text-caption { font-size: .68rem !important; }
+  .customizer__header .customizer__actions { gap: 2px; width: auto; flex: 1; justify-content: flex-end; flex-wrap: nowrap; }
+  .customizer__header .customizer__actions .v-btn--icon { width: 34px; height: 34px; }
+  .customizer__header .customizer__actions .v-btn:not(.v-btn--icon) { flex: 0 1 auto; min-width: 0; padding-inline: 8px; font-size: .72rem; }
+  .customizer__desktop-finish, .customizer__desktop-bottom-finish, .customizer__desktop-nfc { display: none !important; }
+  .customizer__body { gap: 10px; }
+  .customizer__stage { padding: 12px 8px; }
+  /* Cinco accesos a la vista; el resto queda en Más, sin scroll horizontal ni vertical. */
+  .customizer__mobile-toolbar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
+  .customizer__quick-tool { position: relative; min-width: 0; min-height: 54px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 3px; border-radius: 10px; border: 1px solid var(--nt-border); background: var(--nt-surface-elevated); color: var(--nt-text); cursor: pointer; }
+  .customizer__quick-tool span { font-size: .68rem; font-weight: 700; line-height: 1.15; text-align: center; white-space: nowrap; }
+  .customizer__quick-tool:focus-visible { outline: 2px solid var(--nt-accent); outline-offset: 2px; }
+  .customizer__quick-tool:disabled { opacity: .38; cursor: not-allowed; }
+  .customizer__quick-tool--remove:not(:disabled) { color: #fca5a5; }
+  .customizer__quick-tool--pending::after { content: ''; position: absolute; top: 5px; right: 7px; width: 6px; height: 6px; border-radius: 50%; background: var(--nt-accent); }
+  .customizer__tools { display: none; }
+  .customizer__mobile-nfc, .customizer__mobile-properties, .customizer__quick-photo { display: none; }
+  .customizer__stage { padding: 8px 6px; }
+  .customizer__stage > .v-btn.mt-3 { display: none; }
+  .customizer__stage > .v-btn-toggle.mt-5 { margin-top: 8px !important; }
+  .customizer__stage > p.text-caption { display: none; }
+  .customizer__stage--manual > p.text-caption { display: block; margin: 6px 0 0 !important; }
+  .customizer__upload-preview { top: 8px; }
+  .customizer__panel { display: none; }
+  .customizer > p.text-caption { display: none; }
+  .customizer__mobile-finish { position: fixed; z-index: 15; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 12px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--nt-border); background: var(--nt-surface); box-shadow: 0 -12px 30px rgb(0 0 0 / 16%); }
+  .customizer__mobile-total { min-width: 0; flex: 1; display: flex; flex-direction: column; font-size: .75rem; color: var(--nt-text-secondary); }
+  .customizer__mobile-total strong { color: var(--nt-text); font-size: 1.08rem; }
+  .customizer__mobile-finish :deep(.v-btn) { min-height: 48px; }
 }
 </style>

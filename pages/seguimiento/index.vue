@@ -58,3 +58,13 @@ function go(): void {
     </p>
   </v-container>
 </template>
+
+<style scoped>
+@media (max-width: 600px) {
+  .v-container { padding-block: 20px !important; }
+  form { align-items: stretch; }
+  form :deep(.v-btn) { min-height: 48px; }
+  form :deep(.v-text-field) { min-width: 0; }
+}
+@media (max-width: 350px) { form { flex-wrap: wrap; } form :deep(.v-btn) { flex: 1; } }
+</style>

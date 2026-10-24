@@ -509,4 +509,19 @@ onBeforeUnmount(() => {
   .grid { gap: 14px; }
   .panel { padding: 16px; }
 }
+
+/* Perfil más compacto sin ocultar controles de seguridad ni credenciales. */
+@media (max-width: 600px) {
+  .hero { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; padding: 12px; }
+  .hero__photo { width: 64px; height: 80px; }
+  .hero__info { flex-basis: auto; overflow-wrap: anywhere; }
+  .hero__info h1 { font-size: 1.26rem !important; }
+  .hero__info :deep(.v-chip) { max-width: 100%; }
+  .hero__actions { grid-column: 1 / -1; width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+  .hero__actions :deep(.v-btn) { min-width: 0; font-size: 0.78rem; padding-inline: 8px; min-height: 44px; }
+  .panel { padding: 14px; }
+  .panel__title { margin-bottom: 10px; }
+  .panel :deep(.my-6) { margin-block: 14px !important; }
+}
+
 </style>

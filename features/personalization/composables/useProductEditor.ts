@@ -127,6 +127,13 @@ export function useProductEditor(template: ProductTemplate) {
     return (sides[activeSide.value]?.canvas.getObjects().length ?? 0) === 0
   })
 
+  /** Permite borrar solo la fotografía sin tocar el texto, stickers ni el fondo. */
+  const activeSideHasPhoto = computed(() => {
+    void historyVersion.value
+    return (sides[activeSide.value]?.canvas.getObjects() ?? [])
+      .some(obj => (obj as NtObject).ntKind === 'image')
+  })
+
   const canUndo = computed(() => {
     void historyVersion.value
     const rt = current()
@@ -476,6 +483,31 @@ export function useProductEditor(template: ProductTemplate) {
     readSelection()
   }
 
+  /** Elimina únicamente la foto seleccionada o, si está bloqueada, la última añadida.
+   *  No utiliza clearSide(): se conservan texto, stickers y color del fondo.
+   */
+  function removePhoto(): boolean {
+    const canvas = current()?.canvas
+    if (!canvas) return false
+    const isPhoto = (obj: FabricObject): boolean => (obj as NtObject).ntKind === 'image'
+    const selectedPhoto = canvas.getActiveObjects().find(isPhoto)
+    const photo = selectedPhoto ?? [...canvas.getObjects()].reverse().find(isPhoto)
+    if (!photo) return false
+
+    canvas.discardActiveObject()
+    restoring = true
+    try {
+      canvas.remove(photo)
+    }
+    finally {
+      restoring = false
+    }
+    canvas.requestRenderAll()
+    record()
+    readSelection()
+    return true
+  }
+
   async function duplicateSelected(): Promise<void> {
     const canvas = current()?.canvas
     const obj = activeObject()
@@ -665,6 +697,7 @@ export function useProductEditor(template: ProductTemplate) {
     isReady,
     isBusy,
     activeSideIsEmpty,
+    activeSideHasPhoto,
     manualAdjust,
     setManualAdjust,
     hasChanges,
@@ -683,6 +716,7 @@ export function useProductEditor(template: ProductTemplate) {
     updateText,
     applyFilter,
     removeSelected,
+    removePhoto,
     duplicateSelected,
     bringForward,
     sendBackward,

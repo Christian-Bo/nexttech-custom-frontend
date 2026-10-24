@@ -26,6 +26,7 @@ const detailOpen = ref(false)
 const detailLoading = ref(false)
 const downloadingFile = ref<number | null>(null)
 const selected = ref<string[]>([])
+const mobileQueue = ref<'production' | 'ready'>('production')
 const printing = ref(false)
 const writingNfc = ref(false)
 const nfcMessage = ref('')
@@ -283,8 +284,14 @@ onBeforeUnmount(() => {
       v-else
       class="columns"
     >
+      <nav class="production__mobile-tabs" aria-label="Colas de producción">
+        <v-btn-toggle v-model="mobileQueue" mandatory color="primary" variant="tonal" density="comfortable" class="production__queue-toggle">
+          <v-btn value="production" class="text-none">En elaboración ({{ inProduction.length }})</v-btn>
+          <v-btn value="ready" class="text-none">Listos ({{ ready.length }})</v-btn>
+        </v-btn-toggle>
+      </nav>
       <!-- En elaboración -->
-      <section>
+      <section :class="{ 'production__mobile-hidden': mobileQueue !== 'production' }">
         <h2 class="col-title">
           <v-icon
             icon="mdi-hammer-wrench"
@@ -366,7 +373,7 @@ onBeforeUnmount(() => {
       </section>
 
       <!-- Listos -->
-      <section>
+      <section :class="{ 'production__mobile-hidden': mobileQueue !== 'ready' }">
         <h2 class="col-title">
           <v-icon
             icon="mdi-package-variant-closed-check"
@@ -453,18 +460,21 @@ onBeforeUnmount(() => {
               </v-chip>
             </div>
             <v-card variant="tonal" class="pa-4 mb-4" rounded="lg">
-              <div class="font-weight-bold mb-2">NFC · Grabar el chip</div>
-              <v-select v-if="nfcItems.length > 1" v-model="selectedNfcItemIndex" :items="nfcItems" label="Llavero del pedido" density="comfortable" variant="outlined" class="mt-2" @update:model-value="nfcMessage = ''" />
-              <div class="text-body-2 mb-2">Enlace del cliente (solo lectura):</div>
-              <div class="text-body-2" style="overflow-wrap:anywhere">{{ nfcCustomerUrl || 'El detalle no incluye nfcUrl.' }}</div>
-              <v-alert v-if="multipleNfcDestinations" type="error" variant="tonal" density="compact" class="mt-3">Este pedido contiene distintos destinos NFC, pero el backend genera un único /n/ORD para toda la orden. No grabes esos chips hasta que el backend pueda distinguir los destinos por artículo.</v-alert>
-              <v-alert v-else-if="!validNfcWriteUrl" type="warning" variant="tonal" density="compact" class="mt-3">El detalle no incluye un nfcWriteUrl HTTPS válido. Solicita al backend que lo devuelva; nunca escribimos nfcUrl en el chip.</v-alert>
-              <v-btn block color="primary" prepend-icon="mdi-nfc" class="mt-3" :disabled="!nfcSupported || !validNfcWriteUrl" :loading="writingNfc" @click="writeNfc">Grabar NFC</v-btn>
-              <div class="text-caption mt-2">Acerca la etiqueta a la parte de atrás del teléfono y mantenla quieta un segundo.</div>
-              <div class="text-caption text-medium-emphasis">Usa Android con Chrome o Edge. iPhone no puede grabar desde el navegador.</div>
-              <v-alert v-if="!nfcSupported" type="info" density="compact" variant="tonal" class="mt-2">Este teléfono no puede grabar desde el navegador. Usa un Android con Chrome.</v-alert>
-              <v-alert v-if="nfcMessage" type="info" density="compact" variant="tonal" class="mt-2">{{ nfcMessage }}</v-alert>
-              <div v-if="nfcItems.length > 1" class="text-caption text-medium-emphasis mt-2">El backend genera el mismo enlace corto /n/ORD para todos los artículos de esta orden. Si contienen destinos distintos, consulta con backend antes de grabar múltiples chips.</div>
+              <template v-if="nfcItems.length > 0">
+                <div class="font-weight-bold mb-2">NFC · Grabar el chip</div>
+                <v-select v-if="nfcItems.length > 1" v-model="selectedNfcItemIndex" :items="nfcItems" label="Llavero del pedido" density="comfortable" variant="outlined" class="mt-2" @update:model-value="nfcMessage = ''" />
+                <div class="text-body-2 mb-2">Enlace del cliente (solo lectura):</div>
+                <div class="text-body-2" style="overflow-wrap:anywhere">{{ nfcCustomerUrl || 'El detalle no incluye nfcUrl.' }}</div>
+                <v-alert v-if="multipleNfcDestinations" type="error" variant="tonal" density="compact" class="mt-3">Este pedido contiene distintos destinos NFC, pero el backend genera un único /n/ORD para toda la orden. No grabes esos chips hasta que el backend pueda distinguir los destinos por artículo.</v-alert>
+                <v-alert v-else-if="!validNfcWriteUrl" type="warning" variant="tonal" density="compact" class="mt-3">El detalle no incluye un nfcWriteUrl HTTPS válido. Solicita al backend que lo devuelva; nunca escribimos nfcUrl en el chip.</v-alert>
+                <v-btn block color="primary" prepend-icon="mdi-nfc" class="mt-3" :disabled="!nfcSupported || !validNfcWriteUrl" :loading="writingNfc" @click="writeNfc">Grabar NFC</v-btn>
+                <div class="text-caption mt-2">Acerca la etiqueta a la parte de atrás del teléfono y mantenla quieta un segundo.</div>
+                <div class="text-caption text-medium-emphasis">Usa Android con Chrome o Edge. iPhone no puede grabar desde el navegador.</div>
+                <v-alert v-if="!nfcSupported" type="info" density="compact" variant="tonal" class="mt-2">Este teléfono no puede grabar desde el navegador. Usa un Android con Chrome.</v-alert>
+                <v-alert v-if="nfcMessage" type="info" density="compact" variant="tonal" class="mt-2">{{ nfcMessage }}</v-alert>
+                <div v-if="nfcItems.length > 1" class="text-caption text-medium-emphasis mt-2">El backend genera el mismo enlace corto /n/ORD para todos los artículos de esta orden. Si contienen destinos distintos, consulta con backend antes de grabar múltiples chips.</div>
+              </template>
+              <v-alert v-else type="info" variant="tonal" density="compact" class="mb-3">Este pedido se realizó sin NFC. No requiere grabación de chip.</v-alert>
               <v-btn variant="tonal" prepend-icon="mdi-printer" class="mt-3" :loading="printing" @click="printPdf('one', detail.codigoOrden)">Imprimir este llavero</v-btn>
               <v-btn v-if="detailOrder" color="success" prepend-icon="mdi-check-circle-outline" class="mt-3 ml-sm-2" :loading="marking.has(detail.codigoOrden)" @click="markDetailReady">Marcar listo para entrega</v-btn>
             </v-card>
@@ -613,5 +623,24 @@ onBeforeUnmount(() => {
   .columns {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Consola de taller: acciones sin desbordamiento en teléfonos pequeños. */
+@media (max-width: 600px) {
+  .columns { gap: 18px; }
+  .columns :deep(.v-card.pa-4) { padding: 12px !important; }
+  .columns :deep(.v-card strong) { overflow-wrap: anywhere; }
+  .columns :deep(.v-card .v-btn) { min-height: 42px; white-space: normal; height: auto; }
+  .columns :deep(.v-card .d-flex.flex-wrap .v-btn) { flex: 1 1 140px; }
+  .ready-row { flex-wrap: wrap; gap: 6px; padding: 10px; }
+  .zones { grid-template-columns: minmax(0, 1fr); }
+}
+
+.production__mobile-tabs { display: none; }
+@media (max-width: 800px) {
+  .production__mobile-tabs { display: flex; width: 100%; grid-column: 1 / -1; }
+  .production__queue-toggle { width: 100%; display: flex; }
+  .production__queue-toggle :deep(.v-btn) { flex: 1; min-width: 0; padding-inline: 5px; font-size: .78rem; }
+  .production__mobile-hidden { display: none; }
 }
 </style>
