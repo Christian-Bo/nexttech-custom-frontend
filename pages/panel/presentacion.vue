@@ -369,4 +369,7 @@ onBeforeUnmount(() => {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+@media (max-width: 760px) { .show__ranges { grid-template-columns: repeat(2, minmax(0, 1fr)); } .show__panel { min-width: 0; } .show__time { font-size: clamp(1rem, 5vw, 2rem); } }
+
 </style>

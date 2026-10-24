@@ -6,7 +6,7 @@ const auth = useAuthStore()
 /** Botón principal: invita a registrarse solo a quien no ha iniciado sesión. */
 const primaryCta = computed(() => {
   if (!auth.isAuthenticated) {
-    return { text: 'Crear mi cuenta', to: '/registro', icon: undefined }
+    return { text: 'Ver productos', to: '/catalogo', icon: 'mdi-storefront-outline' }
   }
   if (auth.isInternal) {
     return { text: 'Ir a mi panel', to: homeFor(auth.actorType, auth.role), icon: 'mdi-view-dashboard-outline' }
@@ -63,8 +63,7 @@ const products = [
             Diseña tu llavero por los dos lados.
           </h1>
           <p class="hero__lead">
-            Llaveros, photocards e imanes con tu foto y tu mensaje.
-            Paga en efectivo al recibirlo dentro del campus.
+            Agrega tu foto, diseña a tu gusto y recibe tu pedido dentro del campus.
           </p>
 
           <div class="d-flex flex-wrap ga-3 mt-8">
@@ -82,12 +81,15 @@ const products = [
               size="x-large"
               variant="outlined"
               class="text-none"
-              to="/catalogo"
-              prepend-icon="mdi-storefront-outline"
+              :to="auth.isAuthenticated ? '/catalogo' : '/login'"
+              :prepend-icon="auth.isAuthenticated ? 'mdi-storefront-outline' : 'mdi-login'"
             >
-              Ver catálogo
+              {{ auth.isAuthenticated ? 'Ver catálogo' : 'Ingresar' }}
             </v-btn>
           </div>
+          <p v-if="!auth.isAuthenticated" class="hero__register text-body-2 mt-3">
+            ¿Primera vez aquí? <NuxtLink to="/registro">Crear cuenta</NuxtLink>
+          </p>
         </div>
 
         <!-- Producto de ejemplo: gira entre Lado A y Lado B -->
@@ -212,6 +214,9 @@ const products = [
 </template>
 
 <style scoped>
+/* Acceso secundario visible sin agregar otra acción gigante a la portada. */
+.hero__register { color: var(--nt-text-secondary); }
+.hero__register a { color: var(--nt-accent); font-weight: 700; text-underline-offset: 3px; }
 /* ---------- Portada ---------- */
 .hero {
   border-bottom: 1px solid var(--nt-border);
@@ -372,4 +377,38 @@ const products = [
     grid-template-columns: repeat(3, 1fr);
   }
 }
+
+/* Hero mobile-first: llegar al producto y a la primera acción sin páginas de espacio vacío. */
+@media (max-width: 959px) {
+  .hero__grid { gap: 18px; padding-block: 24px 28px; }
+  .hero__title { max-width: 18ch; font-size: clamp(1.9rem, 6.2vw, 3.1rem); line-height: 1.08; }
+  .hero__lead { margin-top: 10px; font-size: 0.95rem; line-height: 1.5; }
+  .hero__product { padding-block: 4px; }
+  .keychain { width: min(160px, 39vw); }
+  .keychain__face { gap: 6px; border-radius: 16px; }
+  .keychain__face :deep(.v-icon) { font-size: 55px !important; }
+  .keychain__caption { font-size: 0.7rem; }
+  .keychain__message { font-size: 1.15rem; }
+  .keychain__hole { width: 11px; height: 11px; top: 8px; }
+  .hero__product :deep(.v-btn-toggle) { margin-top: 12px !important; }
+  .section { padding-block: 28px; }
+  .section__title { margin-bottom: 14px; font-size: 1.5rem; }
+  .steps { gap: 12px; }
+  .steps li { display: grid; grid-template-columns: 36px 1fr; column-gap: 12px; align-items: start; }
+  .steps__number { width: 34px; height: 34px; grid-row: span 2; font-size: 0.9rem; }
+  .steps__title { margin: 0; font-size: 1rem; }
+  .steps__text { margin-top: 4px; font-size: 0.86rem; }
+  .section :deep(.v-card.pa-6) { padding: 16px !important; }
+}
+@media (max-width: 599px) {
+  .hero__grid { gap: 14px; padding-inline: 16px; }
+  .hero__grid > div:first-child > .d-flex { gap: 8px !important; margin-top: 16px !important; }
+  .hero__grid > div:first-child > .d-flex :deep(.v-btn) { min-height: 46px; flex: 1 1 auto; font-size: 0.85rem; padding-inline: 12px; }
+  .section__container { padding-inline: 16px; }
+  .section--last :deep(.v-row) { row-gap: 0; }
+  .section--last :deep(.v-col) { padding-block: 6px; }
+  .section--last :deep(.v-card .v-icon) { font-size: 27px !important; }
+  .section--last :deep(.v-card .text-h6) { margin-top: 8px !important; }
+}
+
 </style>

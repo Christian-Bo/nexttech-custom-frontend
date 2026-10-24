@@ -64,23 +64,65 @@ const pendingCard = ref<RecurrenteCheckoutSession | null>(null)
 const confirmingCard = ref(false)
 const cardMessage = ref('')
 
+// Solo presentación del checkout: el servicio, método y contrato de pago no cambian.
+const mobileStep = ref<1 | 2>(1)
+const attemptedDelivery = ref(false)
+
 const selectedArea = computed(() => areas.value.find(a => a.idAreaEntrega === areaId.value) ?? null)
+const deliveryReady = computed(() => !!areaId.value && reference.value.trim().length >= 3)
+const areaError = computed(() => attemptedDelivery.value && !areaId.value)
+const referenceError = computed(() => attemptedDelivery.value && reference.value.trim().length < 3)
+const canSubmit = computed(() =>
+  deliveryReady.value && cart.items.length > 0 && !pendingCard.value && orders.paymentMethods.includes(payment.value)
+)
 
-/** Para llevar al comprador al campo que le falta. */
-const areasEl = ref<HTMLElement | null>(null)
-const referenceEl = ref<{ focus?: () => void } | null>(null)
+function explainMissingDelivery(): void {
+  attemptedDelivery.value = true
+  mobileStep.value = 1
+  if (!areaId.value) {
+    snackbar.error('Selecciona dónde debemos entregarte el pedido.')
+  }
+  else if (reference.value.trim().length < 3) {
+    snackbar.error('Escribe una referencia de al menos 3 caracteres para encontrarte.')
+  }
+}
 
-const REFERENCE_MIN = 3
-const areaLista = computed(() => !!areaId.value)
-const referenciaLista = computed(() => reference.value.trim().length >= REFERENCE_MIN)
+function continueToPayment(): void {
+  if (!deliveryReady.value) {
+    explainMissingDelivery()
+    return
+  }
+  attemptedDelivery.value = false
+  mobileStep.value = 2
+  if (import.meta.client) window.scrollTo({ top: 0, behavior: 'smooth' })
+}
 
-/** Que es lo primero que falta, en el orden en que aparece en pantalla. */
-const faltante = computed<'carrito' | 'area' | 'referencia' | null>(() => {
-  if (cart.items.length === 0) return 'carrito'
-  if (!areaLista.value) return 'area'
-  if (!referenciaLista.value) return 'referencia'
-  return null
-})
+function submitWithFeedback(): void {
+  if (submitting.value || pendingCard.value) return
+  if (!cart.items.length) {
+    snackbar.warning('El carrito está vacío. Agrega un producto para continuar.')
+    return
+  }
+  if (!deliveryReady.value) {
+    explainMissingDelivery()
+    return
+  }
+  if (!orders.paymentMethods.includes(payment.value)) {
+    snackbar.error('Selecciona un método de pago disponible para continuar.')
+    return
+  }
+  // Se llama al mismo submit() que ya protege de duplicación de órdenes/pagos.
+  void submit()
+}
+
+function mobileAction(): void {
+  if (mobileStep.value === 1) {
+    continueToPayment()
+  }
+  else {
+    submitWithFeedback()
+  }
+}
 
 function areaIcon(nombre: string): string {
   return AREA_ICONS[nombre.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()] ?? 'mdi-map-marker-outline'
@@ -141,32 +183,8 @@ function discardPendingCard(): void {
   cardMessage.value = ''
 }
 
-function irA(el: HTMLElement | null): void {
-  el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-}
-
 async function submit(): Promise<void> {
-  // pendingCard renderiza otra rama de la plantilla, pero el guard se queda por si eso cambia.
-  if (submitting.value || pendingCard.value) return
-
-  // El boton no se deshabilita: si falta algo, lo dice y lleva al campo.
-  if (faltante.value === 'carrito') {
-    snackbar.warning('Tu carrito está vacío. Agregá un producto antes de continuar.')
-    return
-  }
-  if (faltante.value === 'area') {
-    snackbar.warning('Elegí dónde querés recibir tu pedido.')
-    irA(areasEl.value)
-    return
-  }
-  if (faltante.value === 'referencia') {
-    snackbar.warning('Escribí una referencia para que el repartidor te encuentre.')
-    irA(referenceEl.value as unknown as HTMLElement | null)
-    referenceEl.value?.focus?.()
-    return
-  }
-  if (!areaId.value || !orders.paymentMethods.includes(payment.value)) return
-
+  if (!canSubmit.value || !areaId.value || submitting.value) return
   submitting.value = true
   try {
     const response = await orders.checkout({ idAreaEntrega: areaId.value, referenciaEntrega: reference.value, metodoPago: payment.value })
@@ -292,7 +310,7 @@ onMounted(load)
       >
         Carrito
       </v-btn>
-      <h1 class="text-h4 font-weight-bold mb-6">
+      <h1 class="text-h4 font-weight-bold mb-6 checkout__heading">
         Finalizar compra
       </h1>
 
@@ -329,20 +347,44 @@ onMounted(load)
         class="layout"
       >
         <div class="steps">
+          <nav class="checkout__progress" aria-label="Pasos para finalizar la compra">
+            <button
+              type="button"
+              class="checkout__progress-item"
+              :class="{ 'checkout__progress-item--current': mobileStep === 1 }"
+              :aria-current="mobileStep === 1 ? 'step' : undefined"
+              @click="mobileStep = 1"
+            >
+              <span>1</span> Entrega
+            </button>
+            <v-icon icon="mdi-chevron-right" size="16" />
+            <button
+              type="button"
+              class="checkout__progress-item"
+              :class="{ 'checkout__progress-item--current': mobileStep === 2 }"
+              :aria-current="mobileStep === 2 ? 'step' : undefined"
+              :disabled="!deliveryReady"
+              @click="continueToPayment"
+            >
+              <span>2</span> Pago y resumen
+            </button>
+          </nav>
           <!-- 1. Entrega -->
-          <section class="step">
+          <section class="step" :class="{ 'checkout__panel--inactive': mobileStep !== 1 }">
             <h2 class="step__title">
               <span class="step__num">1</span> ¿Dónde te lo entregamos?
-              <v-chip
-                size="x-small"
-                :color="areaLista ? 'success' : 'accent'"
-                variant="flat"
-              >
-                {{ areaLista ? 'Listo' : 'Obligatorio' }}
-              </v-chip>
             </h2>
+            <v-alert
+              v-if="areaError"
+              type="warning"
+              variant="tonal"
+              density="compact"
+              class="mb-3 checkout__inline-warning"
+              role="alert"
+            >
+              Falta seleccionar dónde te entregaremos el pedido.
+            </v-alert>
             <div
-              ref="areasEl"
               class="areas"
               role="radiogroup"
               aria-label="Área de entrega"
@@ -364,45 +406,43 @@ onMounted(load)
                 <span class="font-weight-bold">{{ a.nombre }}</span>
                 <span
                   v-if="a.descripcion"
-                  class="text-caption text-medium-emphasis"
+                  class="area__description text-caption text-medium-emphasis"
                 >{{ a.descripcion }}</span>
               </button>
             </div>
-            <div class="refhead mt-5">
-              <span class="refhead__title">¿Cómo te reconoce el repartidor?</span>
-              <v-chip
-                size="x-small"
-                :color="referenciaLista ? 'success' : 'accent'"
-                variant="flat"
-              >
-                {{ referenciaLista ? 'Listo' : 'Obligatorio' }}
-              </v-chip>
-            </div>
+            <p v-if="selectedArea?.descripcion" class="checkout__selected-description text-caption text-medium-emphasis mt-2 mb-0">
+              {{ selectedArea.descripcion }}
+            </p>
             <v-textarea
-              ref="referenceEl"
               v-model="reference"
-              class="mt-2"
+              class="mt-3"
               label="Referencia para encontrarte"
               placeholder="Ej.: mesa junto a la ventana, suéter azul"
               variant="outlined"
               rows="2"
               auto-grow
-              persistent-placeholder
               :counter="REFERENCE_MAX"
               :maxlength="REFERENCE_MAX"
+              :error="referenceError"
+              :error-messages="referenceError ? ['Escribe una referencia (mínimo 3 caracteres).'] : []"
+              :hint="attemptedDelivery ? undefined : 'Ejemplo: frente a biblioteca, llevo mochila azul.'"
             />
           </section>
 
           <!-- 2. Pago -->
-          <section class="step">
+          <section class="step" :class="{ 'checkout__panel--inactive': mobileStep !== 2 }">
+            <button type="button" class="checkout__back" @click="mobileStep = 1">
+              <v-icon icon="mdi-arrow-left" size="16" /> Cambiar punto de entrega
+            </button>
             <h2 class="step__title">
               <span class="step__num">2</span> ¿Cómo vas a pagar?
             </h2>
             <v-radio-group
               v-model="payment"
+              class="checkout__payment-methods"
               hide-details
             >
-              <v-radio value="EFECTIVO">
+              <v-radio value="EFECTIVO" :disabled="!orders.paymentMethods.includes('EFECTIVO')">
                 <template #label>
                   <div>
                     <div class="font-weight-bold">
@@ -431,6 +471,23 @@ onMounted(load)
                 </template>
               </v-radio>
             </v-radio-group>
+            <details class="checkout__mobile-order">
+              <summary>
+                <v-icon icon="mdi-receipt-text-outline" size="20" />
+                Ver resumen del pedido
+                <strong>{{ formatQ(cart.total) }}</strong>
+                <v-icon icon="mdi-chevron-down" size="18" />
+              </summary>
+              <ul class="summary__items mt-3">
+                <li v-for="i in cart.items" :key="i.idDetalleCarrito">
+                  <span>{{ i.cantidad }} × {{ i.nombreProducto }} ({{ i.nombreVariante }})</span>
+                  <span>{{ formatQ(i.subtotal) }}</span>
+                </li>
+              </ul>
+              <v-divider class="my-3" />
+              <div class="summary__row"><span>Entrega</span><span>{{ selectedArea?.nombre ?? '—' }}</span></div>
+              <div class="summary__row summary__total"><span>Total</span><span>{{ formatQ(cart.total) }}</span></div>
+            </details>
           </section>
         </div>
 
@@ -461,35 +518,30 @@ onMounted(load)
             color="primary"
             size="large"
             block
-            class="text-none mt-4"
+            class="text-none mt-4 summary__desktop-submit"
             prepend-icon="mdi-check"
+            :disabled="submitting || !!pendingCard"
             :loading="submitting"
-            @click="submit"
+            @click="submitWithFeedback"
           >
             {{ payment === 'TARJETA' && !useMocks ? 'Continuar a pago seguro' : 'Confirmar pedido' }}
           </v-btn>
-
-          <!-- Lista viva de lo que falta: el boton sigue activo y explica al tocarlo. -->
-          <ul
-            v-if="faltante"
-            class="pendientes mt-3"
-          >
-            <li :class="{ 'pendientes--ok': areaLista }">
-              <v-icon
-                :icon="areaLista ? 'mdi-check-circle' : 'mdi-circle-outline'"
-                size="16"
-              />
-              Elegí el lugar de entrega
-            </li>
-            <li :class="{ 'pendientes--ok': referenciaLista }">
-              <v-icon
-                :icon="referenciaLista ? 'mdi-check-circle' : 'mdi-circle-outline'"
-                size="16"
-              />
-              Escribí una referencia
-            </li>
-          </ul>
+          <p class="text-caption text-medium-emphasis mt-2 text-center">
+            {{ deliveryReady ? 'Verifica los datos antes de confirmar.' : 'Selecciona un punto de entrega y agrega una referencia.' }}
+          </p>
         </aside>
+        <div v-if="cart.items.length > 0 && !loading && !error" class="checkout__mobile-submit" aria-label="Confirmar compra">
+          <div class="checkout__mobile-total"><span>Total</span><strong>{{ formatQ(cart.total) }}</strong></div>
+          <v-btn
+            color="primary"
+            class="text-none"
+            :disabled="submitting || !!pendingCard"
+            :loading="submitting"
+            @click="mobileAction"
+          >
+            {{ mobileStep === 1 ? 'Continuar a pago' : payment === 'TARJETA' && !useMocks ? 'Pago seguro' : 'Confirmar pedido' }}
+          </v-btn>
+        </div>
       </div>
     </template>
   </v-container>
@@ -565,39 +617,6 @@ onMounted(load)
 .area--on {
   border-color: var(--nt-accent);
   box-shadow: 0 0 0 2px rgb(6 182 212 / 35%);
-}
-
-.refhead {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.refhead__title {
-  font-size: 0.95rem;
-  font-weight: 700;
-}
-
-.pendientes {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  gap: 6px;
-  font-size: 0.8rem;
-  color: var(--nt-text-secondary);
-}
-
-.pendientes li {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.pendientes--ok {
-  color: #22c55e;
-  text-decoration: line-through;
-  opacity: 0.75;
 }
 
 .summary {
@@ -697,4 +716,69 @@ onMounted(load)
 
 .payment-pending { max-width: 760px; margin: 0 auto; min-width: 0; }
 @media (max-width: 600px) { .payment-pending { padding: 0 2px; } }
+
+/* El flujo compacto se activa solo en móvil/tableta; escritorio mantiene ambos apartados. */
+.checkout__progress, .checkout__back, .checkout__mobile-order { display: none; }
+.checkout__selected-description { line-height: 1.35; }
+@media (max-width: 900px) {
+  .checkout__heading { font-size: clamp(1.3rem, 4.8vw, 1.65rem) !important; margin-bottom: 12px !important; }
+  .checkout__progress { display: flex; align-items: center; gap: 8px; width: 100%; padding: 2px 0; }
+  .checkout__progress-item {
+    display: flex; align-items: center; gap: 6px; flex: 1 1 0; min-width: 0;
+    padding: 10px 9px; border: 1px solid var(--nt-border);
+    border-radius: 11px; background: var(--nt-surface); color: var(--nt-text-secondary);
+    font-weight: 600; font-size: .82rem; cursor: pointer; white-space: nowrap;
+  }
+  .checkout__progress-item span { display: grid; place-items: center; flex-shrink: 0; width: 23px; height: 23px; border-radius: 50%; background: var(--nt-surface-elevated); }
+  .checkout__progress-item--current { color: var(--nt-text); border-color: var(--nt-accent); }
+  .checkout__progress-item--current span { background: var(--nt-accent); color: var(--nt-bg); }
+  .checkout__progress-item:disabled { opacity: .58; cursor: not-allowed; }
+  .checkout__progress > .v-icon { flex-shrink: 0; }
+  .checkout__panel--inactive { display: none !important; }
+  .checkout__back { display: inline-flex; align-items: center; gap: 4px; color: var(--nt-accent); font-size: .85rem; margin-bottom: 12px; }
+  .checkout__mobile-order { display: block; border-top: 1px solid var(--nt-border); margin-top: 14px; padding-top: 12px; }
+  .checkout__mobile-order summary { display: flex; align-items: center; gap: 7px; cursor: pointer; list-style: none; }
+  .checkout__mobile-order summary::-webkit-details-marker { display: none; }
+  .checkout__mobile-order summary strong { margin-left: auto; }
+  .checkout__mobile-order .summary__items { font-size: .84rem; }
+  .checkout__payment-methods :deep(.v-selection-control) {
+    padding: 10px; border-radius: 12px; border: 1px solid var(--nt-border);
+    background: var(--nt-bg); margin-bottom: 8px;
+  }
+  .checkout__payment-methods :deep(.v-selection-control--dirty) { border-color: var(--nt-accent); }
+  .summary { display: none; }
+  .area__description { display: none; }
+  .area { flex-direction: row; align-items: center; flex-wrap: wrap; }
+  .area > .font-weight-bold { font-size: .86rem; line-height: 1.25; }
+  .checkout__inline-warning { font-size: .85rem; }
+}
+.checkout__mobile-submit { display: none; }
+@media (max-width: 900px) {
+  .layout { gap: 12px; padding-bottom: calc(89px + env(safe-area-inset-bottom, 0px)); }
+  .step, .summary { padding: 14px; }
+  .steps { gap: 12px; }
+  .step__title { font-size: 1rem; margin-bottom: 12px; }
+  .areas { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .area { min-height: 64px; padding: 10px; gap: 2px; }
+  .area :deep(.v-icon) { font-size: 22px !important; }
+  .summary :deep(.summary__desktop-submit) { display: none; }
+  .checkout__mobile-submit {
+    display: flex; position: fixed; z-index: 16; bottom: 0; left: 0; right: 0;
+    align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--nt-border); background: var(--nt-surface);
+    box-shadow: 0 -8px 24px rgb(0 0 0 / 20%);
+  }
+  .checkout__mobile-total { display: flex; flex-direction: column; }
+  .checkout__mobile-total span { font-size: 0.72rem; color: var(--nt-text-muted); }
+  .checkout__mobile-total strong { font-size: 1.14rem; }
+  .checkout__mobile-submit :deep(.v-btn) { flex: 1 1 auto; max-width: 230px; min-height: 48px; }
+}
+@media (max-width: 380px) {
+  .checkout__progress-item { font-size: .75rem; padding-inline: 6px; }
+  .areas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .area { padding: 7px; }
+  .area > .font-weight-bold { font-size: .78rem; }
+}
+
 </style>

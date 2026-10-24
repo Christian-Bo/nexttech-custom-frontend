@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onBeforeUnmount, ref } from 'vue'
 import { useAuthService } from '~/services/authService'
 import { isApiError } from '~/services/api'
 import type { AccessTokenResultDto } from '~/types/auth'
@@ -27,8 +27,14 @@ const authService = useAuthService()
 type Paso = 'intro' | 'captura' | 'verificando'
 
 const paso = ref<Paso>('intro')
+
+function cancelPending(): void { pending?.abort(); pending = null }
+defineExpose({ cancelPending })
 const error = ref<string | null>(null)
 const traceId = ref<string | null>(null)
+let pending: AbortController | null = null
+let disposed = false
+onBeforeUnmount(() => { disposed = true; pending?.abort(); pending = null })
 
 /** Mensajes por código, según la sección 4 de la actualización del backend. */
 function mensajePara(e: unknown): string {
@@ -68,14 +74,20 @@ async function onCapture(blob: Blob): Promise<void> {
   }
 
   paso.value = 'verificando'
+  const controller = new AbortController()
+  pending?.abort()
+  pending = controller
   try {
-    emit('success', await authService.identifyLogin(blob))
+    const result = await authService.identifyLogin(blob, controller.signal)
+    if (!disposed && !controller.signal.aborted) emit('success', result)
   }
   catch (e) {
+    if (disposed || controller.signal.aborted) return
     error.value = mensajePara(e)
     traceId.value = isApiError(e) ? e.traceId ?? null : null
     paso.value = 'intro'
   }
+  finally { if (pending === controller) pending = null }
 }
 
 function onCancel(): void {

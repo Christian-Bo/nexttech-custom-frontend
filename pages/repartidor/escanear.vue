@@ -85,3 +85,9 @@ async function validate(qr: string): Promise<QrValidationResult> {
     </ClientOnly>
   </div>
 </template>
+
+<style scoped>
+
+@media (max-width: 600px) { :deep(.v-btn) { min-height: 44px; } :deep(.v-input) { min-width: 0; } }
+
+</style>

@@ -15,14 +15,19 @@ import { homeFor } from '~/utils/authRedirect'
 const RUTAS_PUBLICAS = [
   '/login',
   '/registro',
-  '/restablecer-contrasena'
+  '/restablecer-contrasena',
+  '/',
+  '/catalogo',
+  '/seguimiento',
+  '/demo'
 ]
 
 function esPublica(path: string): boolean {
-  return RUTAS_PUBLICAS.some(ruta => path === ruta || path.startsWith(`${ruta}/`))
+  return RUTAS_PUBLICAS.some(ruta => path === ruta || (ruta !== '/' && path.startsWith(`${ruta}/`)))
 }
 
 export default defineNuxtRouteMiddleware((to) => {
+  if (useRuntimeConfig().public.useMocks) return
   const auth = useAuthStore()
 
   // Con sesión abierta, el login y el registro no tienen sentido: a su inicio.

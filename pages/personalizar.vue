@@ -121,14 +121,17 @@ onMounted(async () => {
 <template>
   <v-container
     fluid
-    class="py-6 px-4 px-md-8"
+    class="personalizar-page py-6 px-4 px-md-8"
     style="max-width: 1440px"
   >
     <div class="d-flex flex-wrap align-center ga-4 mb-6">
+      <h1 class="text-h5 font-weight-bold">Personalizar</h1>
+      <v-chip v-if="template?.price !== undefined" color="primary" variant="tonal">{{ formatQ(template.price) }}</v-chip>
       <v-spacer />
       <v-select
         v-if="templates.length > 0"
         v-model="code"
+        class="personalizar-page__desktop-selector"
         :items="templates"
         item-title="name"
         item-value="code"
@@ -137,6 +140,14 @@ onMounted(async () => {
         hide-details
         style="max-width: 340px"
       />
+      <v-menu v-if="templates.length > 1" location="bottom end">
+        <template #activator="{ props: menuProps }">
+          <v-btn v-bind="menuProps" class="personalizar-page__mobile-selector text-none" variant="tonal" size="small" prepend-icon="mdi-swap-horizontal">Modelo</v-btn>
+        </template>
+        <v-list density="compact" max-height="360">
+          <v-list-item v-for="t in templates" :key="t.code" :title="t.name" :active="code === t.code" @click="code = t.code" />
+        </v-list>
+      </v-menu>
     </div>
 
     <v-skeleton-loader
@@ -175,18 +186,6 @@ onMounted(async () => {
       </template>
     </ClientOnly>
 
-    <div
-      v-if="template?.price !== undefined"
-      class="d-flex align-center ga-2 mt-4"
-    >
-      <span class="text-body-2 text-medium-emphasis">Precio del producto</span>
-      <v-chip
-        color="primary"
-        variant="tonal"
-      >
-        {{ formatQ(template.price) }}
-      </v-chip>
-    </div>
 
     <!-- Confirmación -->
     <v-dialog
@@ -215,7 +214,7 @@ onMounted(async () => {
                         color="primary"
             to="/carrito"
           >
-            Ir al carrito
+            Ver carrito
           </v-btn>
           <v-btn
             variant="tonal"
@@ -229,3 +228,14 @@ onMounted(async () => {
 
   </v-container>
 </template>
+
+<style scoped>
+.personalizar-page__mobile-selector { display: none; }
+@media (max-width: 700px) {
+  .personalizar-page__desktop-selector { display: none; }
+  .personalizar-page__mobile-selector { display: inline-flex; }
+  .personalizar-page { padding: 12px 12px 24px !important; }
+  .personalizar-page > .d-flex:first-child { gap: 8px !important; margin-bottom: 12px !important; }
+  .personalizar-page h1 { font-size: 1.22rem !important; }
+}
+</style>

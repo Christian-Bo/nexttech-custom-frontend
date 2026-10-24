@@ -31,7 +31,12 @@ const errorMessage = ref('')
 
 /** Personal con contraseña temporal: se muestra el paso de cambio obligatorio. */
 const changeStep = ref<{ email: string, password: string } | null>(null)
-const altMethod = ref<'qr' | 'face' | 'rapido' | null>(null)
+const altMethod = ref<'qr' | 'rapido' | null>(null)
+const quickFaceRef = ref<{ cancelPending: () => void } | null>(null)
+function closeAltMethod(): void {
+  quickFaceRef.value?.cancelPending()
+  altMethod.value = null
+}
 
 onMounted(() => {
   if (auth.isAuthenticated && !auth.mustChangePassword) void navigateTo(homeFor(auth.actorType, auth.role))
@@ -125,7 +130,7 @@ function cancelChange(): void {
 }
 
 async function onAltLogin(result: AccessTokenResultDto): Promise<void> {
-  altMethod.value = null
+  closeAltMethod()
   await finishBuyer(result)
 }
 
@@ -275,24 +280,15 @@ function cerrarRecuperacion() {
         Ingresar con reconocimiento facial
       </v-btn>
 
-      <div class="d-flex ga-3">
-        <v-btn
-          variant="outlined"
-          class="text-none flex-1-1"
-          prepend-icon="mdi-qrcode-scan"
-          @click="altMethod = 'qr'"
-        >
-          Mi QR
-        </v-btn>
-        <v-btn
-          variant="outlined"
-          class="text-none flex-1-1"
-          prepend-icon="mdi-shield-account-outline"
-          @click="altMethod = 'face'"
-        >
-          Rostro verificado
-        </v-btn>
-      </div>
+      <v-btn
+        variant="outlined"
+        block
+        class="text-none"
+        prepend-icon="mdi-qrcode-scan"
+        @click="altMethod = 'qr'"
+      >
+        Mi QR
+      </v-btn>
 
       <p class="text-center mt-8">
         ¿No tienes cuenta?
@@ -304,23 +300,20 @@ function cerrarRecuperacion() {
     <v-dialog
       :model-value="altMethod !== null"
       max-width="520"
-      @update:model-value="(v: boolean) => { if (!v) altMethod = null }"
+      @update:model-value="(v: boolean) => { if (!v) closeAltMethod() }"
     >
       <v-card
         rounded="lg"
         border
-        class="pa-4"
+        class="pa-4 nt-alt-login-card"
       >
         <FaceQuickLoginCard
           v-if="altMethod === 'rapido'"
+          ref="quickFaceRef"
           @success="onAltLogin"
         />
         <QrLoginCard
           v-else-if="altMethod === 'qr'"
-          @success="onAltLogin"
-        />
-        <FaceLoginCard
-          v-else-if="altMethod === 'face'"
           @success="onAltLogin"
         />
         <v-card-actions>
@@ -328,7 +321,7 @@ function cerrarRecuperacion() {
           <v-btn
             variant="text"
             class="text-none"
-            @click="altMethod = null"
+            @click="closeAltMethod"
           >
             Cerrar
           </v-btn>
@@ -404,6 +397,12 @@ function cerrarRecuperacion() {
 </template>
 
 <style scoped>
+/* El modal de cámara puede desplazarse en teléfonos con poca altura. */
+.nt-alt-login-card {
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+
 .divider {
   display: flex;
   align-items: center;
@@ -419,4 +418,11 @@ function cerrarRecuperacion() {
   height: 1px;
   background: rgb(148 163 184 / 30%);
 }
+
+@media (max-width: 600px) {
+  .divider { margin-block: 14px !important; }
+  :deep(.v-text-field .v-field) { min-height: 50px; }
+  :deep(.v-btn[type="submit"]) { min-height: 48px; }
+}
+
 </style>

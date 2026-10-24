@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useDisplay } from 'vuetify'
 import { INTERNAL_ROLES } from '~/types/auth'
+import { useProfileService } from '~/features/profile/services/profileService'
+import { loadPortrait } from '~/features/photo-studio/services/portraitStorage'
 
 const auth = useAuthStore()
 const cart = useCartStore()
@@ -54,6 +56,42 @@ async function logout(): Promise<void> {
   await navigateTo(wasInternal ? '/login' : '/')
 }
 
+// Avatar visual: misma foto autorizada que utiliza Mi cuenta, sin tocar la sesión ni el JWT.
+const avatarUrl = ref<string | null>(null)
+const avatarInitials = computed(() => (auth.nickname ?? roleLabel.value ?? 'NT').slice(0, 2).toUpperCase())
+let avatarObjectUrl: string | null = null
+let avatarRequest = 0
+
+async function loadAvatar(): Promise<void> {
+  const request = ++avatarRequest
+  if (avatarObjectUrl) URL.revokeObjectURL(avatarObjectUrl)
+  avatarObjectUrl = null
+  avatarUrl.value = null
+  if (!auth.isBuyer) return
+  avatarUrl.value = loadPortrait(auth.buyerId)?.modified ?? null
+  try {
+    const photo = await useProfileService().photo()
+    if (request !== avatarRequest) return
+    if (photo?.size && photo.type.startsWith('image/')) {
+      avatarObjectUrl = URL.createObjectURL(photo)
+      avatarUrl.value = avatarObjectUrl
+    }
+  }
+  catch {
+    // Si no hay retrato accesible, conservar la foto local o mostrar iniciales.
+  }
+}
+
+onMounted(() => void loadAvatar())
+watch(() => [auth.isBuyer, auth.buyerId], () => void loadAvatar())
+watch(() => route.path, (next, previous) => {
+  if (auth.isBuyer && (previous === '/mi-foto' || previous === '/mi-cuenta')) void loadAvatar()
+})
+onBeforeUnmount(() => {
+  avatarRequest++
+  if (avatarObjectUrl) URL.revokeObjectURL(avatarObjectUrl)
+})
+
 onMounted(() => void cart.load().catch(() => {}))
 watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
 </script>
@@ -103,24 +141,39 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
           </v-badge>
         </v-btn>
 
+        <!-- Acceso directo: el visitante no debe abrir el menú para iniciar sesión en móvil. -->
+        <v-btn
+          v-if="!auth.isAuthenticated && smAndDown"
+          to="/login"
+          variant="text"
+          size="small"
+          class="bar__login text-none"
+        >
+          Ingresar
+        </v-btn>
+
         <v-menu location="bottom end">
           <template #activator="{ props }">
-            <!-- En telefono siempre las tres barritas, haya sesion o no. -->
             <v-btn
-              v-if="smAndDown"
+              v-if="auth.isAuthenticated"
+              v-bind="props"
+              variant="text"
+              class="bar__account text-none ml-1"
+              :aria-label="`Mi cuenta: ${auth.nickname ?? roleLabel ?? 'Usuario'}`"
+            >
+              <v-avatar size="34" class="bar__avatar">
+                <v-img v-if="avatarUrl" :src="avatarUrl" alt="Foto de perfil" cover />
+                <span v-else class="bar__avatar-initials">{{ avatarInitials }}</span>
+              </v-avatar>
+              <span v-if="!smAndDown" class="ml-2 bar__account-name">{{ auth.nickname ?? roleLabel ?? 'Mi cuenta' }}</span>
+              <v-icon v-if="!smAndDown" icon="mdi-chevron-down" size="small" class="ml-1" />
+            </v-btn>
+            <v-btn
+              v-else-if="smAndDown"
               v-bind="props"
               icon="mdi-menu"
               aria-label="Menú"
             />
-            <v-btn
-              v-else-if="auth.isAuthenticated"
-              v-bind="props"
-              variant="tonal"
-              class="text-none ml-1"
-              prepend-icon="mdi-account-circle-outline"
-            >
-              {{ auth.nickname ?? roleLabel ?? 'Mi cuenta' }}
-            </v-btn>
           </template>
 
           <v-list
@@ -189,41 +242,15 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
           </v-list>
         </v-menu>
 
-        <!-- Cerrar sesion a la vista, sin tener que abrir el menu.
-             Dos botones separados a proposito: mezclar la prop `icon` con un slot
-             vacio hace que Vuetify dibuje el slot y el boton quede invisible. -->
-        <v-btn
-          v-if="auth.isAuthenticated && smAndDown"
-          icon="mdi-logout"
-          variant="tonal"
-          size="small"
-          class="ml-1"
-          aria-label="Cerrar sesión"
-          @click="logout"
-        />
-        <v-btn
-          v-else-if="auth.isAuthenticated"
-          variant="tonal"
-          class="text-none ml-1"
-          prepend-icon="mdi-logout"
-          @click="logout"
-        >
-          Salir
-        </v-btn>
-
-        <!-- Ingresar siempre visible: en telefono es lo primero que busca quien ya tiene cuenta. -->
-        <template v-if="!auth.isAuthenticated">
+        <template v-if="!auth.isAuthenticated && !smAndDown">
           <v-btn
             to="/login"
-            variant="outlined"
+            variant="text"
             class="text-none ml-1"
-            :size="smAndDown ? 'small' : undefined"
-            prepend-icon="mdi-login"
           >
             Ingresar
           </v-btn>
           <v-btn
-            v-if="!smAndDown"
             to="/registro"
             color="primary"
             variant="flat"
@@ -233,7 +260,6 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
           </v-btn>
         </template>
       </div>
-
     </v-app-bar>
 
     <v-main class="nt-layer">
@@ -293,4 +319,31 @@ watch(() => auth.isBuyer, () => void cart.load().catch(() => {}))
   border-radius: 2px;
   background: linear-gradient(90deg, var(--nt-primary), var(--nt-accent));
 }
+
+/* Avatar real o iniciales visibles incluso mientras carga la fotografía. */
+.bar__avatar { background: var(--nt-surface-elevated); border: 1px solid var(--nt-border); }
+.bar__avatar-initials { font-size: 0.8rem; font-weight: 800; color: var(--nt-text); }
+.bar__account-name { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Barra móvil compacta: cuenta, carrito y acceso permanecen visibles. */
+.bar { min-width: 0; }
+.bar :deep(.v-btn) { flex-shrink: 0; }
+@media (max-width: 600px) {
+  .bar { gap: 3px; padding-inline: 8px; }
+  .bar :deep(.v-btn--icon) { width: 40px; height: 44px; }
+  .bar__login { padding-inline: 8px; min-height: 40px; font-size: 0.84rem; font-weight: 600; }
+  .bar__account { min-width: 40px; padding-inline: 3px !important; }
+  .bar :deep(.v-badge__badge) { font-size: 10px; }
+  .bar :deep(a):focus-visible { outline-offset: 0; }
+}
+@media (max-width: 350px) {
+  .bar { padding-inline: 4px; gap: 0; }
+  .bar__login { padding-inline: 6px; }
+}
+
+
+@media (max-width: 380px) {
+  .bar :deep(.brand) { font-size: 0.88rem; }
+  .bar :deep(.brand__custom) { display: none; }
+}
+
 </style>

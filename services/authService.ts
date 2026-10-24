@@ -44,13 +44,14 @@ export function createAuthService(api: HttpClient) {
      * El navegador NO fija Content-Type: lo pone solo con el boundary del FormData.
      * Ante 401 mostrar SIEMPRE un mensaje genérico; nunca revelar candidatos.
      */
-    identifyLogin: (image: Blob) => {
+    identifyLogin: (image: Blob, signal?: AbortSignal) => {
       const form = new FormData()
       form.append('image', image, 'rostro.jpg')
       return api<AccessTokenResultDto>('/api/auth/face-identify-login', {
         method: 'POST',
         body: form,
-        timeout: 45_000
+        timeout: 45_000,
+        ...(signal ? { signal } : {})
       })
     },
 

@@ -526,6 +526,36 @@ onMounted(async () => {
             </tr>
           </tbody>
         </v-table>
+        <!-- Administración móvil: mismos eventos, sin recortar acciones -->
+        <div class="nt-admin-mobile" aria-label="Usuarios">
+          <v-card v-for="u in result?.items ?? []" :key="u.id" border rounded="lg" variant="tonal" class="pa-3 mb-2" :class="{ 'row--off': !u.isActive }">
+            <div class="d-flex align-start ga-2">
+              <v-avatar color="primary" variant="tonal" size="36">{{ (u.firstName[0] ?? '') + (u.lastName[0] ?? '') }}</v-avatar>
+              <div class="flex-grow-1 nt-allow-wrap">
+                <div class="font-weight-bold">{{ u.fullName }}</div>
+                <div class="text-caption text-medium-emphasis nt-allow-wrap">{{ u.email }}</div>
+              </div>
+              <v-menu location="bottom end">
+                <template #activator="{ props: menuProps }"><v-btn v-bind="menuProps" icon="mdi-dots-vertical" size="small" variant="tonal" :loading="busyId === u.id" :aria-label="`Acciones para ${u.fullName}`" /></template>
+                <v-list density="compact">
+                  <v-list-item prepend-icon="mdi-pencil-outline" title="Editar" @click="openEdit(u)" />
+                  <v-list-item prepend-icon="mdi-lock-reset" title="Restablecer contraseña" @click="resetPassword(u)" />
+                  <v-list-item v-if="u.isLocked" prepend-icon="mdi-lock-open-variant-outline" title="Desbloquear" @click="unlock(u)" />
+                  <v-divider />
+                  <v-list-item :prepend-icon="u.isActive ? 'mdi-account-off-outline' : 'mdi-account-check-outline'" :title="u.isActive ? 'Desactivar' : 'Activar'" @click="toggleActive(u)" />
+                </v-list>
+              </v-menu>
+            </div>
+            <div class="d-flex flex-wrap align-center ga-2 mt-2">
+              <v-chip size="x-small" variant="tonal" :prepend-icon="ROLE_ICONS[u.role.code] ?? 'mdi-account-outline'">{{ u.role.name }}</v-chip>
+              <v-chip size="x-small" variant="tonal" :color="u.isActive ? 'success' : undefined">{{ u.isActive ? 'Activo' : 'Inactivo' }}</v-chip>
+              <v-chip v-if="u.isLocked" size="x-small" color="error" variant="tonal">Bloqueado</v-chip>
+              <v-chip v-if="u.mustChangePassword" size="x-small" color="warning" variant="tonal">Contraseña temporal</v-chip>
+            </div>
+            <div class="text-caption text-medium-emphasis mt-2">Último acceso: {{ u.lastAccessUtc ? timeAgo(u.lastAccessUtc) : 'Nunca' }}</div>
+          </v-card>
+          <p v-if="!loading && !result?.items.length" class="pa-4 text-center text-medium-emphasis">No hay usuarios con esos filtros.</p>
+        </div>
       </div>
 
       <div
@@ -659,6 +689,20 @@ onMounted(async () => {
             </tr>
           </tbody>
         </v-table>
+        <div class="nt-admin-mobile" aria-label="Registros de auditoría">
+          <v-card v-for="a in auditResult?.items ?? []" :key="a.id" variant="tonal" border rounded="lg" class="pa-3 mb-2">
+            <div class="d-flex align-center justify-space-between ga-2 mb-2">
+              <strong class="nt-allow-wrap">{{ actionLabel(a.action) }}</strong>
+              <v-chip size="x-small" variant="tonal" :color="isSuccess(a.result) ? 'success' : 'error'">{{ isSuccess(a.result) ? 'Éxito' : a.result }}</v-chip>
+            </div>
+            <div class="text-body-2">{{ a.internalUserName ?? (a.buyerId ? `Comprador #${a.buyerId}` : 'Sistema') }}</div>
+            <div v-if="a.roleName" class="text-caption text-medium-emphasis">{{ a.roleName }}</div>
+            <div class="text-caption text-medium-emphasis nt-allow-wrap">{{ a.entityDisplayName ?? a.entity }}</div>
+            <div class="text-caption text-medium-emphasis mt-2">{{ formatDateTime(a.occurredAtUtc) }}</div>
+            <div class="text-caption text-medium-emphasis">IP: {{ a.ipAddress ?? '—' }}</div>
+          </v-card>
+          <p v-if="!auditLoading && !auditResult?.items.length" class="pa-4 text-center text-medium-emphasis">Sin registros.</p>
+        </div>
       </div>
 
       <div
@@ -848,4 +892,23 @@ onMounted(async () => {
   letter-spacing: 0.08em;
   color: var(--nt-text);
 }
+
+.nt-admin-mobile { display: none; }
+.nt-allow-wrap { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .toolbar { gap: 8px; }
+  .toolbar__search { max-width: none; flex: 1 1 100%; }
+  .toolbar__select { min-width: 0; flex: 1 1 45%; }
+  .toolbar > :deep(.v-btn) { width: 100%; }
+  .panel { overflow: visible; padding: 8px; }
+  .panel > :deep(.v-table) { display: none; }
+  .nt-admin-mobile { display: block; }
+  .panel .nt-admin-mobile :deep(.v-card) { min-width: 0; }
+  :deep(.v-dialog .v-card-text) { padding-inline: 14px !important; }
+  :deep(.v-dialog .v-card-text .d-flex) { flex-wrap: wrap; }
+  :deep(.v-dialog .v-card-text .v-input) { flex: 1 1 100%; min-width: 0; }
+  :deep(.v-tabs) { max-width: 100%; }
+  :deep(.v-tab) { padding-inline: 8px; min-width: 0; font-size: .76rem; }
+}
+
 </style>

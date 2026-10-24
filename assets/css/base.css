@@ -96,3 +96,16 @@ canvas {
   position: relative;
   z-index: 1;
 }
+
+/* Ajustes globales: evitar zoom por campos pequeños y scroll horizontal accidental. */
+html { scroll-padding-top: 80px; }
+body, #__nuxt, .v-application { max-width: 100%; overflow-x: clip; }
+.v-main, .v-container { min-width: 0; }
+.v-dialog .v-card { max-width: 100%; }
+@media (max-width: 600px) {
+  .v-main .v-container.py-8 { padding-block: 16px !important; padding-inline: 14px; }
+  .v-main h1.text-h4 { font-size: 1.55rem !important; line-height: 1.18; }
+  .v-main .mb-6 { margin-bottom: 16px !important; }
+  .v-main .mt-8 { margin-top: 18px !important; }
+  .v-text-field input, .v-textarea textarea, .v-select input { font-size: 16px; }
+}

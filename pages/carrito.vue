@@ -216,7 +216,7 @@ onMounted(load)
           color="primary"
           size="large"
           block
-          class="text-none mt-5"
+          class="text-none mt-5 summary__desktop-checkout"
           append-icon="mdi-arrow-right"
         >
           Continuar con la compra
@@ -230,6 +230,12 @@ onMounted(load)
           Seguir comprando
         </v-btn>
       </aside>
+      <div class="cart__mobile-checkout" aria-label="Resumen de compra">
+        <div class="cart__mobile-total"><span>Total</span><strong>{{ formatQ(cart.total) }}</strong></div>
+        <v-btn to="/checkout" color="primary" class="text-none" append-icon="mdi-arrow-right">
+          Continuar
+        </v-btn>
+      </div>
     </div>
   </v-container>
 </template>
@@ -328,4 +334,29 @@ onMounted(load)
   .item__subtotal { grid-area: total; }
   .item > :last-child { grid-area: del; }
 }
+
+.cart__mobile-checkout { display: none; }
+@media (max-width: 900px) {
+  .layout { gap: 14px; padding-bottom: calc(87px + env(safe-area-inset-bottom, 0px)); }
+  .summary { padding: 14px; }
+  .summary :deep(.summary__desktop-checkout) { display: none; }
+  .cart__mobile-checkout {
+    display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 16;
+    align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+    background: var(--nt-surface); border-top: 1px solid var(--nt-border);
+    box-shadow: 0 -8px 24px rgb(0 0 0 / 20%);
+  }
+  .cart__mobile-total { display: flex; flex-direction: column; }
+  .cart__mobile-total span { font-size: 0.72rem; color: var(--nt-text-muted); }
+  .cart__mobile-total strong { font-size: 1.13rem; }
+  .cart__mobile-checkout :deep(.v-btn) { flex: 1 1 auto; max-width: 220px; min-height: 48px; }
+}
+@media (max-width: 600px) {
+  .item { gap: 8px; padding: 12px; }
+  .item__info { min-width: 0; overflow-wrap: anywhere; font-size: 0.92rem; }
+  .item__qty { min-width: 0; max-width: 130px; }
+  .item__subtotal { font-size: 0.97rem; white-space: nowrap; }
+}
+
 </style>

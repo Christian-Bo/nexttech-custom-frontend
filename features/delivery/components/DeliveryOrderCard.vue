@@ -92,4 +92,7 @@ defineProps<{ order: DeliveryOrderDto }>()
   gap: 6px;
   margin-top: 12px;
 }
+
+@media (max-width: 600px) { .order__top, .order__main, .order__bottom { min-width: 0; } .order__bottom { flex-wrap: wrap; gap: 8px; } .order__bottom :deep(.v-btn) { min-height: 42px; } }
+
 </style>

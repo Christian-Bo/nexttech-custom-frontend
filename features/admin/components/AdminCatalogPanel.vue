@@ -339,10 +339,43 @@ onMounted(loadAll)
           </tr>
         </tbody>
       </v-table>
+      <div v-if="section !== 'productos'" class="nt-catalog-mobile" aria-label="Categorías y áreas">
+        <template v-if="section === 'categorias'">
+          <v-card v-for="c in categories" :key="c.idCategoria" border rounded="lg" variant="tonal" class="pa-3 mb-2">
+            <div class="d-flex justify-space-between ga-2"><strong class="nt-wrap">{{ c.nombre }}</strong><v-chip size="x-small" variant="tonal" :color="c.activo ? 'success' : undefined">{{ c.activo ? 'Activa' : 'Inactiva' }}</v-chip></div>
+            <div class="text-caption text-medium-emphasis nt-wrap mt-1">{{ c.descripcion ?? 'Sin descripción' }}</div>
+            <div class="d-flex flex-wrap ga-2 mt-2"><v-btn size="small" variant="tonal" prepend-icon="mdi-pencil-outline" @click="openNamed('categoria', c)">Editar</v-btn><v-btn size="small" variant="text" :loading="busy === `c-${c.idCategoria}`" @click="toggleCategory(c)">{{ c.activo ? 'Desactivar' : 'Activar' }}</v-btn></div>
+          </v-card>
+        </template>
+        <template v-else>
+          <v-card v-for="a in areas" :key="a.idAreaEntrega" border rounded="lg" variant="tonal" class="pa-3 mb-2">
+            <div class="d-flex justify-space-between ga-2"><strong class="nt-wrap">{{ a.nombre }}</strong><v-chip size="x-small" variant="tonal" :color="a.activo ? 'success' : undefined">{{ a.activo ? 'Activa' : 'Inactiva' }}</v-chip></div>
+            <div class="text-caption text-medium-emphasis nt-wrap mt-1">{{ a.descripcion ?? 'Sin descripción' }}</div>
+            <div class="d-flex flex-wrap ga-2 mt-2"><v-btn size="small" variant="tonal" prepend-icon="mdi-pencil-outline" @click="openNamed('area', a)">Editar</v-btn><v-btn size="small" variant="text" :loading="busy === `a-${a.idAreaEntrega}`" @click="toggleArea(a)">{{ a.activo ? 'Desactivar' : 'Activar' }}</v-btn></div>
+          </v-card>
+        </template>
+      </div>
+
+      <div v-if="section === 'productos'" class="nt-catalog-mobile" aria-label="Productos">
+        <v-card v-for="p in products" :key="p.codigoProducto" border rounded="lg" variant="tonal" class="pa-3 mb-2" :class="{ 'row--off': !p.activo }">
+          <div class="d-flex align-start ga-2">
+            <div class="flex-grow-1 nt-wrap"><strong>{{ p.nombre }}</strong><div class="text-caption text-medium-emphasis">{{ p.codigoProducto }} · {{ p.categoria }}</div></div>
+            <v-chip size="x-small" variant="tonal" :color="p.activo ? 'success' : undefined">{{ p.activo ? 'Visible' : 'Oculto' }}</v-chip>
+          </div>
+          <div class="text-body-2 mt-2">{{ formatQ(p.precioBase) }} · {{ p.variantesActivas }} variantes activas</div>
+          <div class="d-flex flex-wrap ga-1 mt-2">
+            <v-btn size="small" variant="tonal" class="text-none" prepend-icon="mdi-layers-outline" :loading="busy === `p-${p.codigoProducto}`" @click="openVariants(p)">Variantes</v-btn>
+            <v-btn size="small" variant="tonal" class="text-none" prepend-icon="mdi-pencil-outline" @click="editProduct(p)">Editar</v-btn>
+            <v-btn size="small" variant="text" class="text-none" :prepend-icon="p.activo ? 'mdi-eye-off-outline' : 'mdi-eye-outline'" @click="toggleProduct(p)">{{ p.activo ? 'Ocultar' : 'Mostrar' }}</v-btn>
+          </div>
+        </v-card>
+        <p v-if="!loading && !products.length" class="pa-3 text-center text-medium-emphasis">Aún no hay productos.</p>
+      </div>
+
 
       <!-- Categorías / Áreas -->
       <v-table
-        v-else
+        v-if="section !== 'productos'"
         class="bg-transparent"
       >
         <thead>
@@ -772,4 +805,17 @@ onMounted(loadAll)
   border: 1px solid rgb(6 182 212 / 40%);
   background: rgb(15 23 42 / 50%);
 }
+
+.nt-catalog-mobile { display: none; }
+.nt-wrap { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .panel { padding: 8px; overflow: visible; }
+  .panel > :deep(.v-table) { display: none; }
+  .nt-catalog-mobile { display: block; }
+  :deep(.v-btn-toggle) { max-width: 100%; overflow-x: auto; }
+  :deep(.v-btn-toggle .v-btn) { font-size: .76rem; padding-inline: 7px; }
+  :deep(.v-dialog .v-card-text .d-flex) { flex-wrap: wrap; }
+  :deep(.v-dialog .v-card-text .v-input) { min-width: 0; flex: 1 1 100%; }
+}
+
 </style>

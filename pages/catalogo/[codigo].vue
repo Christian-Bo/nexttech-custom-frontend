@@ -20,6 +20,7 @@ const variantId = ref<number | null>(null)
 const quantity = ref(1)
 const loading = ref(true)
 const adding = ref(false)
+const showInfo = ref(false)
 const error = ref<ApiError | null>(null)
 
 useHead(() => ({ title: `${product.value?.nombre ?? 'Producto'} · NextTech Custom` }))
@@ -159,9 +160,16 @@ onMounted(load)
         <div class="text-h5 font-weight-bold mt-2">
           {{ formatQ(variant?.precioActual ?? product.precioBase) }}
         </div>
-        <p class="text-body-1 text-medium-emphasis mt-4">
-          {{ product.descripcion }}
-        </p>
+        <v-btn
+          variant="outlined"
+          color="accent"
+          size="small"
+          class="info__trigger text-none mt-3"
+          prepend-icon="mdi-information-outline"
+          @click="showInfo = true"
+        >
+          Información y características
+        </v-btn>
 
         <section
           v-if="product.variantes.length > 1"
@@ -187,27 +195,7 @@ onMounted(load)
           </v-chip-group>
         </section>
 
-        <section
-          v-if="variant && variant.atributos.length"
-          class="mt-4"
-        >
-          <h2 class="info__label">
-            Características
-          </h2>
-          <dl class="attrs">
-            <template
-              v-for="a in variant.atributos"
-              :key="a.atributo"
-            >
-              <dt>{{ a.atributo }}</dt>
-              <dd>{{ a.valor }}</dd>
-            </template>
-            <template v-if="product.medidas">
-              <dt>Diámetro</dt>
-              <dd>{{ product.medidas.diametroLlaveroPulgadas }}" ({{ product.medidas.diametroLlaveroMm }} mm)</dd>
-            </template>
-          </dl>
-        </section>
+
 
         <div class="actions mt-8">
           <template v-if="product.permitePersonalizacion">
@@ -251,12 +239,60 @@ onMounted(load)
           </template>
         </div>
 
-        <ul class="perks mt-8">
-          <li><v-icon icon="mdi-map-marker-radius-outline" /> Entrega dentro del campus</li>
-          <li><v-icon icon="mdi-cash" /> Pago en efectivo al recibir</li>
-          <li><v-icon icon="mdi-timer-sand" /> Elaboración en minutos y seguimiento en tiempo real</li>
-        </ul>
+
       </div>
+    </div>
+
+    <!-- Información secundaria: misma información, accesible sin ocupar la pantalla principal. -->
+    <v-dialog v-model="showInfo" max-width="500" scrollable>
+      <v-card rounded="lg">
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon icon="mdi-information-outline" color="accent" />
+          Información del producto
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" aria-label="Cerrar información" @click="showInfo = false" />
+        </v-card-title>
+        <v-card-text v-if="product" class="detail__info-body">
+          <p v-if="product.descripcion" class="text-body-1 mb-4">{{ product.descripcion }}</p>
+          <template v-if="variant?.atributos.length || product.medidas">
+            <h2 class="info__label mb-3">Características</h2>
+            <dl class="attrs mb-5">
+              <template v-for="a in variant?.atributos ?? []" :key="a.atributo">
+                <dt>{{ a.atributo }}</dt>
+                <dd>{{ a.valor }}</dd>
+              </template>
+              <template v-if="product.medidas">
+                <dt>Diámetro</dt>
+                <dd>{{ product.medidas.diametroLlaveroPulgadas }}" ({{ product.medidas.diametroLlaveroMm }} mm)</dd>
+              </template>
+            </dl>
+          </template>
+          <h2 class="info__label mb-3">Compra y entrega</h2>
+          <ul class="perks">
+            <li><v-icon icon="mdi-map-marker-radius-outline" /> Entrega dentro del campus</li>
+            <li><v-icon icon="mdi-cash" /> Pago en efectivo al recibir</li>
+            <li><v-icon icon="mdi-timer-sand" /> Elaboración en minutos y seguimiento en tiempo real</li>
+          </ul>
+        </v-card-text>
+        <v-card-actions><v-spacer /><v-btn variant="tonal" @click="showInfo = false">Cerrar</v-btn></v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- CTA móvil: mismas rutas, mismo handler y condiciones que la acción original. -->
+    <div v-if="product && variant" class="detail__mobile-action" aria-label="Continuar con el producto">
+      <span class="detail__mobile-price">{{ formatQ(variant.precioActual) }}</span>
+      <v-btn
+        v-if="product.permitePersonalizacion"
+        color="primary"
+        class="text-none"
+        :to="{ path: '/personalizar', query: { producto: variant.codigoVariante } }"
+        prepend-icon="mdi-palette-outline"
+      >
+        Personalizar
+      </v-btn>
+      <v-btn v-else color="primary" class="text-none" :loading="adding" prepend-icon="mdi-cart-plus" @click="addWithoutDesign">
+        Agregar
+      </v-btn>
     </div>
   </v-container>
 </template>
@@ -397,4 +433,36 @@ onMounted(load)
     gap: 28px;
   }
 }
+
+.detail__mobile-action { display: none; }
+.detail__info-body { overflow-wrap: anywhere; }
+@media (max-width: 860px) {
+  .detail { gap: 10px; }
+  .info { order: -1; }
+  .info__trigger { max-width: 100%; }
+  .info .text-h5 { margin-top: 2px !important; }
+  .stage { padding: 14px 12px; gap: 8px; }
+  .stage__piece { width: min(174px, 44vw); }
+  .stage__sides { flex-wrap: wrap; justify-content: center; }
+  .info .text-h4 { font-size: clamp(1.35rem, 5.5vw, 1.9rem) !important; }
+  .info .text-h5 { font-size: 1.35rem !important; }
+  .info .mt-8 { margin-top: 16px !important; }
+  .info .mt-6 { margin-top: 12px !important; }
+  .info .mt-4 { margin-top: 12px !important; }
+}
+@media (max-width: 600px) {
+  .detail { padding-bottom: calc(82px + env(safe-area-inset-bottom, 0px)); }
+  .detail__mobile-action {
+    display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 15;
+    align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+    background: var(--nt-surface); border-top: 1px solid var(--nt-border);
+    box-shadow: 0 -8px 24px rgb(0 0 0 / 20%);
+  }
+  .detail__mobile-action :deep(.v-btn) { min-height: 46px; flex: 1; max-width: 220px; }
+  .detail__mobile-price { font-weight: 800; font-size: 1.08rem; white-space: nowrap; }
+  .actions > :deep(.v-btn), .actions > .d-flex > :deep(.v-btn) { display: none; }
+  .perks { margin-top: 16px !important; }
+}
+
 </style>

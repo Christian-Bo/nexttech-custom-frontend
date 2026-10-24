@@ -726,4 +726,7 @@ onBeforeUnmount(() => {
   color: var(--nt-text-secondary);
   cursor: pointer;
 }
+
+@media (max-width: 600px) { :deep(.v-card) { max-width: 100%; } :deep(.v-card .v-card-text) { padding-inline: 12px; } :deep(.v-btn) { min-height: 42px; } :deep(.v-input) { min-width: 0; } }
+
 </style>

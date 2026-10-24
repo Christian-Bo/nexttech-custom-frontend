@@ -129,4 +129,7 @@ function useOnline() {
   font-weight: 500;
   color: var(--nt-text-muted);
 }
+
+@media (max-width: 600px) { .shell { padding: 10px 10px calc(82px + env(safe-area-inset-bottom, 0px)); } :deep(.v-bottom-navigation) { padding-bottom: env(safe-area-inset-bottom, 0px); } }
+
 </style>
